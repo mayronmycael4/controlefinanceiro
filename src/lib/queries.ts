@@ -1,21 +1,47 @@
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/tenant";
 import { MESES } from "@/lib/constants";
-import { hashPassword, PROFILE_ID, DEFAULT_PROFILE, DEFAULT_PASSWORD } from "@/lib/auth";
+import { requireUserId, getActingUser, getSession } from "@/lib/auth";
 
-// ---- Perfil do usuário (singleton) ----
-export async function getProfile() {
-  let p = await db.profile.findUnique({ where: { id: PROFILE_ID } });
-  if (!p) {
-    p = await db.profile.create({
-      data: {
-        id: PROFILE_ID,
-        name: DEFAULT_PROFILE.name,
-        email: DEFAULT_PROFILE.email,
-        password: hashPassword(DEFAULT_PASSWORD),
-      },
-    });
-  }
-  return { id: p.id, name: p.name, email: p.email };
+// ---- Usuário logado no momento (considera impersonação) ----
+export async function getCurrentUser() {
+  const user = await getActingUser();
+  if (!user) return null;
+  return { id: user.id, name: user.name, email: user.email, role: user.role };
+}
+
+// Sessão bruta (para saber se um admin está "vendo como" outro usuário)
+export async function getRawSession() {
+  return getSession();
+}
+
+// ---- Administração: usuários e log de atividades ----
+export async function getAllUsers() {
+  return db.user.findMany({
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  });
+}
+
+export async function getActivityLogs(opts: {
+  limit?: number;
+  allUsers?: boolean;
+  filterUserId?: string;
+} = {}) {
+  const userId = await requireUserId();
+  const isAdmin = (await getSession())?.user.role === "admin";
+  const where =
+    opts.allUsers && isAdmin
+      ? opts.filterUserId
+        ? { userId: opts.filterUserId }
+        : {}
+      : { userId };
+  return db.activityLog.findMany({
+    where,
+    include: { user: { select: { name: true, email: true } } },
+    orderBy: { createdAt: "desc" },
+    take: opts.limit ?? 200,
+  });
 }
 
 export function iniciaisDoNome(nome: string): string {
@@ -66,7 +92,9 @@ function whereFromFilter(f: TxFilter) {
 }
 
 // ---- Metas de economia ----
-export function getGoals() {
+export async function getGoals() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.goal.findMany({ orderBy: { createdAt: "asc" } });
 }
 
@@ -85,6 +113,8 @@ export type ItemVencer = {
 };
 
 export async function getContasAVencer(limit = 8): Promise<ItemVencer[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const pend = await db.transaction.findMany({
     where: { status: "pendente", isTransfer: false },
     include: { account: true, creditCard: true },
@@ -140,6 +170,8 @@ export async function getContasAVencer(limit = 8): Promise<ItemVencer[]> {
 
 // ---- Fluxo de caixa projetado (próximos N meses) ----
 export async function getFluxoProjetado(monthsAhead = 6) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const now = new Date();
   const accounts = await getAccountsWithBalance();
   const patrimonio = accounts.reduce((s, a) => s + a.saldo, 0);
@@ -292,7 +324,9 @@ function ocorrencias(r: RecLike, start: Date, end: Date): Date[] {
   return res.sort((a, b) => a.getTime() - b.getTime());
 }
 
-export function getRecurrings() {
+export async function getRecurrings() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.recurring.findMany({
     include: { category: true, account: true, creditCard: true },
     orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
@@ -302,6 +336,8 @@ export function getRecurrings() {
 // Gera os lançamentos pendentes das recorrentes ativas até o fim do mês informado.
 // Idempotente: `lastGenerated` guarda a data já coberta (respeita exclusões).
 export async function materializeRecurring(month: number, year: number) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const ativos = await db.recurring.findMany({ where: { active: true } });
   if (ativos.length === 0) return;
 
@@ -319,6 +355,7 @@ export async function materializeRecurring(month: number, year: number) {
     for (const date of datas) {
       await db.transaction.create({
         data: {
+          userId,
           description: r.description,
           amount: r.amount,
           kind: r.kind,
@@ -339,40 +376,56 @@ export async function materializeRecurring(month: number, year: number) {
 }
 
 // ---- Listas simples para selects ----
-export function getAccounts() {
+export async function getAccounts() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.account.findMany({ orderBy: { createdAt: "asc" } });
 }
-export function getCreditCards() {
+export async function getCreditCards() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.creditCard.findMany({ orderBy: { createdAt: "asc" } });
 }
-export function getCreditCardById(id: string) {
+export async function getCreditCardById(id: string) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.creditCard.findUnique({ where: { id } });
 }
-export function getCardTransactions(cardId: string) {
+export async function getCardTransactions(cardId: string) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.transaction.findMany({
     where: { creditCardId: cardId },
     include: { category: true, account: true, creditCard: true },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 }
-export function getAccountById(id: string) {
+export async function getAccountById(id: string) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.account.findUnique({ where: { id } });
 }
-export function getAccountTransactions(accountId: string) {
+export async function getAccountTransactions(accountId: string) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.transaction.findMany({
     where: { accountId },
     include: { category: true, account: true, creditCard: true },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 }
-export function getCategories(kind?: "receita" | "despesa") {
+export async function getCategories(kind?: "receita" | "despesa") {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.category.findMany({
     where: kind ? { kind } : {},
     orderBy: { name: "asc" },
   });
 }
 
-export function getCategoriesWithCount() {
+export async function getCategoriesWithCount() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.category.findMany({
     include: { _count: { select: { transactions: true, recurrings: true } } },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
@@ -381,6 +434,8 @@ export function getCategoriesWithCount() {
 
 // ---- Anos disponíveis (para o filtro) ----
 export async function getAvailableYears(): Promise<number[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const [first, last] = await Promise.all([
     db.transaction.findFirst({ orderBy: { date: "asc" } }),
     db.transaction.findFirst({ orderBy: { date: "desc" } }),
@@ -394,7 +449,9 @@ export async function getAvailableYears(): Promise<number[]> {
 }
 
 // ---- Transações filtradas ----
-export function listTransactions(f: TxFilter) {
+export async function listTransactions(f: TxFilter) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   return db.transaction.findMany({
     where: whereFromFilter(f),
     include: { category: true, account: true, creditCard: true },
@@ -404,6 +461,8 @@ export function listTransactions(f: TxFilter) {
 
 // ---- Resumo do período ----
 export async function getSummary(f: TxFilter) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const txs = await db.transaction.findMany({
     where: { ...whereFromFilter(f), isTransfer: false },
   });
@@ -432,6 +491,8 @@ export async function getSummary(f: TxFilter) {
 
 // ---- Saldo real por conta (all-time, apenas pagos) ----
 export async function getAccountsWithBalance() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const accounts = await db.account.findMany({ orderBy: { createdAt: "asc" } });
   const txs = await db.transaction.findMany({
     where: { status: "pago", accountId: { not: null } },
@@ -449,6 +510,8 @@ export async function getAccountsWithBalance() {
 
 // ---- Uso dos cartões (fatura do período + limite comprometido) ----
 export async function getCreditCardsWithUsage(f: TxFilter) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const cards = await db.creditCard.findMany({ orderBy: { createdAt: "asc" } });
   const { start, end } = dateRange(f);
   const [periodo, pendentes, aPagarTxs] = await Promise.all([
@@ -495,6 +558,8 @@ async function groupBy(
   kind: "receita" | "despesa",
   by: "category" | "account" | "creditCard"
 ): Promise<Group[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const txs = await db.transaction.findMany({
     where: { ...whereFromFilter({ ...f, kind }), kind, isTransfer: false },
     include: { category: true, account: true, creditCard: true },
@@ -531,6 +596,8 @@ export async function getCategoriaStatusBreakdown(
   f: TxFilter,
   kind: "receita" | "despesa"
 ): Promise<CategoriaStatus[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const txs = await db.transaction.findMany({
     where: { ...whereFromFilter({ ...f, kind }), kind, isTransfer: false },
     include: { category: true },
@@ -553,6 +620,8 @@ export async function getCategoriaStatusBreakdown(
 
 // ---- Fluxo mensal do ano (barras) ----
 export async function getFluxoMensal(year: number) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const txs = await db.transaction.findMany({
     where: {
       date: { gte: new Date(year, 0, 1), lt: new Date(year + 1, 0, 1) },
@@ -573,6 +642,8 @@ export async function getFluxoMensal(year: number) {
 
 // ---- Evolução do saldo acumulado no ano (realizado + previsto c/ pendentes) ----
 export async function getEvolucaoSaldo(year: number) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const accountsInit = await db.account.aggregate({ _sum: { initialBalance: true } });
   const inicial = await db.transaction.findMany({
     where: { date: { lt: new Date(year, 0, 1) }, status: "pago", isTransfer: false },
@@ -624,6 +695,8 @@ export type SaudeFinanceira = {
 };
 
 export async function getSaudeFinanceira(): Promise<SaudeFinanceira> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const now = new Date();
   const mInicio = new Date(now.getFullYear(), now.getMonth(), 1);
   const fimMes = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -670,6 +743,8 @@ export async function getSaudeFinanceira(): Promise<SaudeFinanceira> {
 
 // ---- Etiquetas (tags) existentes ----
 export async function getAllTags(): Promise<string[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const rows = await db.transaction.findMany({
     where: { tags: { not: "" } },
     select: { tags: true },
@@ -691,6 +766,8 @@ export async function getCategoriaEvolucao(
   year: number,
   kind: "receita" | "despesa"
 ): Promise<{ meses: string[]; series: SerieCategoria[] }> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const txs = await db.transaction.findMany({
     where: {
       kind,
@@ -731,6 +808,8 @@ export async function getComparativoMeses(
   b: { month: number; year: number },
   kind: "receita" | "despesa"
 ): Promise<LinhaComparativo[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const [txsA, txsB] = await Promise.all([
     db.transaction.findMany({
       where: { ...whereFromFilter({ ...a, kind }), kind, isTransfer: false },
@@ -777,6 +856,8 @@ export type Insight = {
 
 // ---- Insights / alertas para melhor controle ----
 export async function getInsights(month: number, year: number): Promise<Insight[]> {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const insights: Insight[] = [];
   const now = new Date();
   const ehMesAtual = now.getMonth() + 1 === month && now.getFullYear() === year;
@@ -915,6 +996,8 @@ function brl(v: number) {
 
 // ---- Orçamentos do mês com gasto real ----
 export async function getBudgets(month: number, year: number) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const budgets = await db.budget.findMany({
     where: { month, year },
     include: { category: true },
@@ -952,6 +1035,8 @@ export async function getBudgets(month: number, year: number) {
 
 // ---- Carteira de FIIs ----
 export async function getFiis() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const fiis = await db.fii.findMany({
     include: { transactions: true, dividends: true },
     orderBy: { ticker: "asc" },
@@ -987,6 +1072,8 @@ export async function getFiis() {
 }
 
 export async function getFiiById(id: string) {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
   const f = await db.fii.findUnique({
     where: { id },
     include: {

@@ -11,13 +11,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Profile {
-  id        String   @id
+// ---- Usuários / autenticação / auditoria ----
+model User {
+  id        String   @id @default(cuid())
   name      String
-  email     String
+  email     String   @unique
   password  String // hash no formato "salt:hash"
+  role      String   @default("user") // admin | user
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  sessions     Session[]
+  activityLogs ActivityLog[]
+  goals        Goal[]
+  accounts     Account[]
+  creditCards  CreditCard[]
+  categories   Category[]
+  recurrings   Recurring[]
+  transactions Transaction[]
+  budgets      Budget[]
+  fiis         Fii[]
+  fiiTransactions FiiTransaction[]
+  fiiDividends    FiiDividend[]
+}
+
+model Session {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatingId String? // se o admin está "vendo como" outro usuário
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime
+
+  @@index([userId])
+}
+
+// Log de atividades: registra ações relevantes feitas por cada usuário.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String // ex.: "transacao.criar"
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // Metas de economia (objetivos)
@@ -29,6 +68,11 @@ model Goal {
   deadline  DateTime?
   color     String    @default("var(--color-chart-1)")
   createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {
@@ -40,6 +84,11 @@ model Account {
   createdAt      DateTime      @default(now())
   transactions   Transaction[]
   recurrings     Recurring[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model CreditCard {
@@ -53,6 +102,11 @@ model CreditCard {
   createdAt    DateTime      @default(now())
   transactions Transaction[]
   recurrings   Recurring[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Category {
@@ -64,6 +118,11 @@ model Category {
   transactions Transaction[]
   budgets      Budget[]
   recurrings   Recurring[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Transações recorrentes / fixas (assinaturas, salário, aluguel...)
@@ -92,6 +151,11 @@ model Recurring {
   creditCard   CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
 
   transactions Transaction[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -128,10 +192,14 @@ model Transaction {
   // mas NÃO conta como despesa nos relatórios (evita contagem dupla).
   isTransfer Boolean @default(false)
 
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([date])
   @@index([kind])
   @@index([status])
   @@index([installmentId])
+  @@index([userId])
 }
 
 model Budget {
@@ -143,13 +211,16 @@ model Budget {
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   createdAt  DateTime  @default(now())
 
-  @@unique([month, year, categoryId])
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year, categoryId])
 }
 
 // Carteira de Fundos Imobiliários (FIIs) — controle separado do patrimônio geral.
 model Fii {
   id             String    @id @default(cuid())
-  ticker         String    @unique // ex.: MXRF11
+  ticker         String // ex.: MXRF11
   name           String    @default("")
   color          String    @default("var(--color-chart-1)")
   currentPrice   Float     @default(0) // cotação atual (manual ou via API)
@@ -160,6 +231,11 @@ model Fii {
 
   transactions FiiTransaction[]
   dividends    FiiDividend[]
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
 }
 
 model FiiTransaction {
@@ -172,7 +248,11 @@ model FiiTransaction {
   date      DateTime
   createdAt DateTime @default(now())
 
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([fiiId])
+  @@index([userId])
 }
 
 model FiiDividend {
@@ -183,5 +263,10 @@ model FiiDividend {
   date      DateTime // mês/data de referência do pagamento
   createdAt DateTime @default(now())
 
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([fiiId])
+  @@index([userId])
 }
+

@@ -1,8 +1,10 @@
+import { redirect } from "next/navigation";
 import { PerfilForm, SenhaForm } from "@/components/forms/perfil-forms";
-import { getProfile } from "@/lib/queries";
+import { getCurrentUser } from "@/lib/queries";
 
 export default async function ConfiguracoesPage() {
-  const profile = await getProfile();
+  const profile = await getCurrentUser();
+  if (!profile) redirect("/login");
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">

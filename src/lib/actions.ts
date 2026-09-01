@@ -2,13 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { scopedDb } from "@/lib/tenant";
 import { CHART_COLORS } from "@/lib/constants";
 import {
   hashPassword,
   verifyPassword,
-  PROFILE_ID,
-  DEFAULT_PROFILE,
-  DEFAULT_PASSWORD,
+  getUserId,
+  getSession,
+  createSession,
+  destroySession,
+  logActivity,
 } from "@/lib/auth";
 import { materializeRecurring } from "@/lib/queries";
 import { randomUUID } from "node:crypto";
@@ -57,26 +60,34 @@ function normalizeTags(v: FormDataEntryValue | null): string {
     .join(",");
 }
 
-async function pickColor(model: "account" | "category"): Promise<string> {
+async function pickColor(
+  database: ReturnType<typeof scopedDb>,
+  model: "account" | "category"
+): Promise<string> {
   const count =
     model === "account"
-      ? await db.account.count()
-      : await db.category.count();
+      ? await database.account.count()
+      : await database.category.count();
   return CHART_COLORS[count % CHART_COLORS.length];
 }
 
 // ---------- Contas ----------
 export async function createAccount(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome da conta." };
   await db.account.create({
     data: {
+      userId,
       name,
       type: str(fd.get("type")) || "carteira",
       initialBalance: money(fd.get("initialBalance")),
-      color: str(fd.get("color")) || (await pickColor("account")),
+      color: str(fd.get("color")) || (await pickColor(db, "account")),
     },
   });
+  await logActivity(userId, "conta.criar", `Conta criada: ${name}`);
   revalidateApp();
   return { ok: true };
 }
@@ -85,6 +96,9 @@ export async function updateAccount(
   id: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome da conta." };
   const color = str(fd.get("color"));
@@ -97,23 +111,32 @@ export async function updateAccount(
       ...(color ? { color } : {}),
     },
   });
+  await logActivity(userId, "conta.editar", `Conta atualizada: ${name}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteAccount(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.account.delete({ where: { id } });
+  await logActivity(userId, "conta.excluir", "Conta excluída");
   revalidateApp();
   return { ok: true };
 }
 
 // ---------- Cartões ----------
 export async function createCreditCard(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome do cartão." };
   const count = await db.creditCard.count();
   await db.creditCard.create({
     data: {
+      userId,
       name,
       brand: str(fd.get("brand")),
       limit: money(fd.get("limit")),
@@ -122,6 +145,7 @@ export async function createCreditCard(fd: FormData): Promise<ActionResult> {
       color: str(fd.get("color")) || CHART_COLORS[(count + 3) % CHART_COLORS.length],
     },
   });
+  await logActivity(userId, "cartao.criar", `Cartão criado: ${name}`);
   revalidateApp();
   return { ok: true };
 }
@@ -130,6 +154,9 @@ export async function updateCreditCard(
   id: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome do cartão." };
   const color = str(fd.get("color"));
@@ -144,12 +171,17 @@ export async function updateCreditCard(
       ...(color ? { color } : {}),
     },
   });
+  await logActivity(userId, "cartao.editar", `Cartão atualizado: ${name}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteCreditCard(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.creditCard.delete({ where: { id } });
+  await logActivity(userId, "cartao.excluir", "Cartão excluído");
   revalidateApp();
   return { ok: true };
 }
@@ -157,6 +189,9 @@ export async function deleteCreditCard(id: string): Promise<ActionResult> {
 // Paga a fatura do cartão: quita as despesas pendentes até o fim do mês
 // (libera o limite) e registra a saída da conta como transferência.
 export async function payCardInvoice(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const cardId = str(fd.get("cardId"));
   const accountId = str(fd.get("accountId"));
   if (!cardId) return { ok: false, error: "Cartão inválido." };
@@ -189,6 +224,7 @@ export async function payCardInvoice(fd: FormData): Promise<ActionResult> {
   // Registra a saída da conta como transferência (não conta como despesa)
   await db.transaction.create({
     data: {
+      userId,
       description: `Pagamento fatura ${card.name}`,
       amount: total,
       kind: "despesa",
@@ -199,21 +235,31 @@ export async function payCardInvoice(fd: FormData): Promise<ActionResult> {
     },
   });
 
+  await logActivity(
+    userId,
+    "cartao.pagar_fatura",
+    `Fatura paga: ${card.name} — R$ ${total.toFixed(2)}`
+  );
   revalidateApp();
   return { ok: true };
 }
 
 // ---------- Categorias ----------
 export async function createCategory(fd: FormData): Promise<CategoriaResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome da categoria." };
   const category = await db.category.create({
     data: {
+      userId,
       name,
       kind: str(fd.get("kind")) === "receita" ? "receita" : "despesa",
-      color: str(fd.get("color")) || (await pickColor("category")),
+      color: str(fd.get("color")) || (await pickColor(db, "category")),
     },
   });
+  await logActivity(userId, "categoria.criar", `Categoria criada: ${name}`);
   revalidateApp();
   return { ok: true, category };
 }
@@ -222,6 +268,9 @@ export async function updateCategory(
   id: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   if (!name) return { ok: false, error: "Informe o nome da categoria." };
   const color = str(fd.get("color"));
@@ -229,14 +278,19 @@ export async function updateCategory(
     where: { id },
     data: { name, ...(color ? { color } : {}) },
   });
+  await logActivity(userId, "categoria.editar", `Categoria atualizada: ${name}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   // Transações/recorrentes ficam sem categoria (SetNull); orçamentos da
   // categoria são removidos (Cascade) — conforme o schema.
   await db.category.delete({ where: { id } });
+  await logActivity(userId, "categoria.excluir", "Categoria excluída");
   revalidateApp();
   return { ok: true };
 }
@@ -298,6 +352,9 @@ function primeiraFatura(compra: Date, closingDay: number, dueDay: number) {
 
 // ---------- Transações ----------
 export async function createTransaction(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const description = str(fd.get("description"));
   const amount = money(fd.get("amount"));
   if (!description) return { ok: false, error: "Informe a descrição." };
@@ -344,6 +401,7 @@ export async function createTransaction(fd: FormData): Promise<ActionResult> {
           ? round2(total - valorParcela * (parcelas - 1))
           : valorParcela;
       dados.push({
+        userId,
         description: `${description} (${i + 1}/${parcelas})`,
         amount: valor,
         kind,
@@ -358,6 +416,11 @@ export async function createTransaction(fd: FormData): Promise<ActionResult> {
       });
     }
     await db.transaction.createMany({ data: dados });
+    await logActivity(
+      userId,
+      "transacao.criar",
+      `Nova compra parcelada: ${description} (${parcelas}x) — R$ ${amount.toFixed(2)}`
+    );
     revalidateApp();
     return { ok: true };
   }
@@ -368,6 +431,7 @@ export async function createTransaction(fd: FormData): Promise<ActionResult> {
     const dados = [];
     for (let i = 0; i < repeticoes; i++) {
       dados.push({
+        userId,
         description: `${description} (${i + 1}/${repeticoes})`,
         amount,
         kind,
@@ -382,12 +446,18 @@ export async function createTransaction(fd: FormData): Promise<ActionResult> {
       });
     }
     await db.transaction.createMany({ data: dados });
+    await logActivity(
+      userId,
+      "transacao.criar",
+      `Novo lançamento recorrente: ${description} (${repeticoes}x) — R$ ${amount.toFixed(2)}`
+    );
     revalidateApp();
     return { ok: true };
   }
 
   await db.transaction.create({
     data: {
+      userId,
       description,
       amount,
       kind,
@@ -400,6 +470,11 @@ export async function createTransaction(fd: FormData): Promise<ActionResult> {
       tags,
     },
   });
+  await logActivity(
+    userId,
+    "transacao.criar",
+    `Novo lançamento: ${description} — R$ ${amount.toFixed(2)}`
+  );
   revalidateApp();
   return { ok: true };
 }
@@ -408,6 +483,9 @@ export async function updateTransaction(
   id: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const description = str(fd.get("description"));
   const amount = money(fd.get("amount"));
   if (!description) return { ok: false, error: "Informe a descrição." };
@@ -444,6 +522,7 @@ export async function updateTransaction(
       tags: normalizeTags(fd.get("tags")),
     },
   });
+  await logActivity(userId, "transacao.editar", `Lançamento atualizado: ${description}`);
   revalidateApp();
   return { ok: true };
 }
@@ -451,24 +530,36 @@ export async function updateTransaction(
 export async function deleteInstallmentGroup(
   installmentId: string
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.transaction.deleteMany({ where: { installmentId } });
+  await logActivity(userId, "transacao.excluir", "Grupo de parcelas excluído");
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteTransaction(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.transaction.delete({ where: { id } });
+  await logActivity(userId, "transacao.excluir", "Lançamento excluído");
   revalidateApp();
   return { ok: true };
 }
 
 export async function toggleTransactionStatus(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const t = await db.transaction.findUnique({ where: { id } });
   if (!t) return { ok: false, error: "Transação não encontrada." };
   await db.transaction.update({
     where: { id },
     data: { status: t.status === "pago" ? "pendente" : "pago" },
   });
+  await logActivity(userId, "transacao.status", `Status alterado: ${t.description}`);
   revalidateApp();
   return { ok: true };
 }
@@ -478,11 +569,15 @@ export async function settleTransaction(
   id: string,
   accountId: string
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   if (!accountId) return { ok: false, error: "Escolha uma conta." };
   await db.transaction.update({
     where: { id },
     data: { status: "pago", accountId, creditCardId: null },
   });
+  await logActivity(userId, "transacao.quitar", "Lançamento quitado");
   revalidateApp();
   return { ok: true };
 }
@@ -499,6 +594,9 @@ export async function importTransactions(
   rows: ImportRow[],
   accountId: string
 ): Promise<ActionResult & { count?: number }> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   if (!accountId) return { ok: false, error: "Escolha a conta de destino." };
   const validas = rows.filter(
     (r) => r.description && r.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(r.date)
@@ -508,6 +606,7 @@ export async function importTransactions(
 
   await db.transaction.createMany({
     data: validas.map((r) => ({
+      userId,
       description: r.description.slice(0, 200),
       amount: r.amount,
       kind: r.kind === "receita" ? "receita" : "despesa",
@@ -516,32 +615,45 @@ export async function importTransactions(
       accountId,
     })),
   });
+  await logActivity(
+    userId,
+    "transacao.importar",
+    `Extrato importado: ${validas.length} lançamento(s)`
+  );
   revalidateApp();
   return { ok: true, count: validas.length };
 }
 
 // ---------- Orçamento ----------
 export async function setBudget(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const amount = money(fd.get("amount"));
   if (!(amount > 0)) return { ok: false, error: "Informe um valor válido." };
   const month = parseInt(str(fd.get("month")), 10);
   const year = parseInt(str(fd.get("year")), 10);
   const categoryId = str(fd.get("categoryId")) || null;
 
-  // NULL é distinto em índices únicos do SQLite, então o upsert por
-  // (month, year, categoryId=null) não casa — tratamos o total manualmente.
+  // NULL é distinto em índices únicos do Postgres, então o upsert por
+  // (userId, month, year, categoryId=null) não casa — tratamos o total manualmente.
   const existing = await db.budget.findFirst({ where: { month, year, categoryId } });
   if (existing) {
     await db.budget.update({ where: { id: existing.id }, data: { amount } });
   } else {
-    await db.budget.create({ data: { amount, month, year, categoryId } });
+    await db.budget.create({ data: { userId, amount, month, year, categoryId } });
   }
+  await logActivity(userId, "orcamento.definir", `Orçamento definido: R$ ${amount.toFixed(2)}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteBudget(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.budget.delete({ where: { id } });
+  await logActivity(userId, "orcamento.excluir", "Orçamento excluído");
   revalidateApp();
   return { ok: true };
 }
@@ -552,6 +664,9 @@ export async function copyBudgetsFromPreviousMonth(
   month: number,
   year: number
 ): Promise<ActionResult & { copied?: number }> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const prev = month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year };
   const [origem, destino] = await Promise.all([
     db.budget.findMany({ where: { month: prev.month, year: prev.year } }),
@@ -563,12 +678,17 @@ export async function copyBudgetsFromPreviousMonth(
   const jaExiste = new Set(destino.map((b) => b.categoryId ?? "__total__"));
   const novos = origem
     .filter((b) => !jaExiste.has(b.categoryId ?? "__total__"))
-    .map((b) => ({ amount: b.amount, month, year, categoryId: b.categoryId }));
+    .map((b) => ({ userId, amount: b.amount, month, year, categoryId: b.categoryId }));
 
   if (novos.length === 0)
     return { ok: false, error: "Todos os orçamentos deste mês já estão definidos." };
 
   await db.budget.createMany({ data: novos });
+  await logActivity(
+    userId,
+    "orcamento.copiar",
+    `Orçamentos copiados do mês anterior: ${novos.length} categoria(s)`
+  );
   revalidateApp();
   return { ok: true, copied: novos.length };
 }
@@ -617,14 +737,18 @@ function recurringDataFrom(fd: FormData) {
 }
 
 export async function createRecurring(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const data = recurringDataFrom(fd);
   if (!data.description) return { ok: false, error: "Informe a descrição." };
   if (!(data.amount > 0)) return { ok: false, error: "Informe um valor válido." };
 
-  await db.recurring.create({ data });
+  await db.recurring.create({ data: { ...data, userId } });
   // Materializa o mês atual para já aparecer na previsão
   const now = new Date();
   await materializeRecurring(now.getMonth() + 1, now.getFullYear());
+  await logActivity(userId, "recorrente.criar", `Recorrente criado: ${data.description}`);
   revalidateApp();
   return { ok: true };
 }
@@ -633,6 +757,9 @@ export async function updateRecurring(
   id: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const data = recurringDataFrom(fd);
   if (!data.description) return { ok: false, error: "Informe a descrição." };
   if (!(data.amount > 0)) return { ok: false, error: "Informe um valor válido." };
@@ -649,71 +776,119 @@ export async function updateRecurring(
     data: { ...data, lastGenerated: null },
   });
   await materializeRecurring(now.getMonth() + 1, now.getFullYear());
+  await logActivity(userId, "recorrente.editar", `Recorrente atualizado: ${data.description}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function toggleRecurringActive(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const r = await db.recurring.findUnique({ where: { id } });
   if (!r) return { ok: false, error: "Recorrente não encontrado." };
   await db.recurring.update({ where: { id }, data: { active: !r.active } });
+  await logActivity(
+    userId,
+    "recorrente.pausar",
+    `Recorrente ${r.active ? "pausado" : "reativado"}: ${r.description}`
+  );
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteRecurring(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   // Remove os lançamentos pendentes (não pagos) gerados por este recorrente;
   // os já pagos ficam no histórico (recurringId vira null).
   await db.transaction.deleteMany({
     where: { recurringId: id, status: "pendente" },
   });
   await db.recurring.delete({ where: { id } });
+  await logActivity(userId, "recorrente.excluir", "Recorrente excluído");
   revalidateApp();
   return { ok: true };
 }
 
-// ---------- Perfil / Senha / Login ----------
-async function ensureProfile() {
-  const p = await db.profile.findUnique({ where: { id: PROFILE_ID } });
-  if (p) return p;
-  return db.profile.create({
-    data: {
-      id: PROFILE_ID,
-      name: DEFAULT_PROFILE.name,
-      email: DEFAULT_PROFILE.email,
-      password: hashPassword(DEFAULT_PASSWORD),
-    },
-  });
-}
-
+// ---------- Perfil / Senha / Login / Cadastro ----------
 export async function authenticate(fd: FormData): Promise<ActionResult> {
   const email = str(fd.get("email")).toLowerCase();
   const password = str(fd.get("password"));
   if (!email || !password)
     return { ok: false, error: "Preencha e-mail e senha." };
 
-  const p = await ensureProfile();
-  if (p.email.toLowerCase() !== email || !verifyPassword(password, p.password)) {
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user || !verifyPassword(password, user.password)) {
     return { ok: false, error: "E-mail ou senha incorretos." };
   }
+  await createSession(user.id);
+  await logActivity(user.id, "auth.login", "Login realizado");
+  return { ok: true };
+}
+
+export async function signup(fd: FormData): Promise<ActionResult> {
+  const name = str(fd.get("name"));
+  const email = str(fd.get("email")).toLowerCase();
+  const password = str(fd.get("password"));
+  const confirm = str(fd.get("confirmPassword"));
+
+  if (!name) return { ok: false, error: "Informe seu nome." };
+  if (!email || !/.+@.+\..+/.test(email))
+    return { ok: false, error: "Informe um e-mail válido." };
+  if (!password || password.length < 4)
+    return { ok: false, error: "A senha deve ter ao menos 4 caracteres." };
+  if (password !== confirm)
+    return { ok: false, error: "A confirmação de senha não confere." };
+
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) return { ok: false, error: "Já existe uma conta com este e-mail." };
+
+  // O primeiro usuário do sistema vira administrador automaticamente.
+  const count = await db.user.count();
+  const user = await db.user.create({
+    data: {
+      name,
+      email,
+      password: hashPassword(password),
+      role: count === 0 ? "admin" : "user",
+    },
+  });
+  await createSession(user.id);
+  await logActivity(user.id, "auth.signup", "Conta criada");
+  return { ok: true };
+}
+
+export async function logout(): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (userId) await logActivity(userId, "auth.logout", "Logout realizado");
+  await destroySession();
   return { ok: true };
 }
 
 export async function updateProfile(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
   const name = str(fd.get("name"));
-  const email = str(fd.get("email"));
+  const email = str(fd.get("email")).toLowerCase();
   if (!name) return { ok: false, error: "Informe seu nome." };
   if (!email || !/.+@.+\..+/.test(email))
     return { ok: false, error: "Informe um e-mail válido." };
 
-  await ensureProfile();
-  await db.profile.update({ where: { id: PROFILE_ID }, data: { name, email } });
+  const outro = await db.user.findFirst({ where: { email, NOT: { id: userId } } });
+  if (outro) return { ok: false, error: "Este e-mail já está em uso por outra conta." };
+
+  await db.user.update({ where: { id: userId }, data: { name, email } });
+  await logActivity(userId, "perfil.editar", "Perfil atualizado");
   revalidatePath("/configuracoes");
   revalidatePath("/", "layout"); // atualiza o nome/e-mail na sidebar
   return { ok: true };
 }
 
 export async function changePassword(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
   const current = str(fd.get("currentPassword"));
   const next = str(fd.get("newPassword"));
   const confirm = str(fd.get("confirmPassword"));
@@ -723,19 +898,100 @@ export async function changePassword(fd: FormData): Promise<ActionResult> {
   if (next !== confirm)
     return { ok: false, error: "A confirmação não confere." };
 
-  const p = await ensureProfile();
-  if (!verifyPassword(current, p.password))
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user || !verifyPassword(current, user.password))
     return { ok: false, error: "Senha atual incorreta." };
 
-  await db.profile.update({
-    where: { id: PROFILE_ID },
+  await db.user.update({
+    where: { id: userId },
     data: { password: hashPassword(next) },
   });
+  await logActivity(userId, "perfil.senha", "Senha alterada");
   return { ok: true };
+}
+
+// ---------- Administração de usuários ----------
+export async function createUserByAdmin(fd: FormData): Promise<ActionResult> {
+  const admin = (await getSession())?.user;
+  if (!admin || admin.role !== "admin")
+    return { ok: false, error: "Apenas administradores podem criar usuários." };
+
+  const name = str(fd.get("name"));
+  const email = str(fd.get("email")).toLowerCase();
+  const password = str(fd.get("password"));
+  const role = str(fd.get("role")) === "admin" ? "admin" : "user";
+  if (!name) return { ok: false, error: "Informe o nome." };
+  if (!email || !/.+@.+\..+/.test(email))
+    return { ok: false, error: "Informe um e-mail válido." };
+  if (!password || password.length < 4)
+    return { ok: false, error: "A senha deve ter ao menos 4 caracteres." };
+
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) return { ok: false, error: "Já existe uma conta com este e-mail." };
+
+  await db.user.create({
+    data: { name, email, password: hashPassword(password), role },
+  });
+  await logActivity(admin.id, "admin.criar_usuario", `Usuário criado: ${name} (${email})`);
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function deleteUserByAdmin(id: string): Promise<ActionResult> {
+  const admin = (await getSession())?.user;
+  if (!admin || admin.role !== "admin")
+    return { ok: false, error: "Apenas administradores podem excluir usuários." };
+  if (admin.id === id) return { ok: false, error: "Você não pode excluir a si mesmo." };
+
+  await db.user.delete({ where: { id } });
+  await logActivity(admin.id, "admin.excluir_usuario", "Usuário excluído");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+// Admin "entra como" outro usuário, para ver/gerenciar os dados dele.
+export async function impersonateUser(targetUserId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin")
+    return { ok: false, error: "Apenas administradores podem fazer isso." };
+
+  const target = await db.user.findUnique({ where: { id: targetUserId } });
+  if (!target) return { ok: false, error: "Usuário não encontrado." };
+
+  await db.session.update({
+    where: { id: session.id },
+    data: { impersonatingId: targetUserId },
+  });
+  await logActivity(
+    session.user.id,
+    "admin.impersonar",
+    `Admin entrou como: ${target.name} (${target.email})`
+  );
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function stopImpersonating(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Sessão expirada." };
+  await db.session.update({
+    where: { id: session.id },
+    data: { impersonatingId: null },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Wrapper compatível com `<form action={...}>` (que exige retorno void).
+export async function stopImpersonatingForm(): Promise<void> {
+  await stopImpersonating();
 }
 
 // ---------- Transferência entre contas ----------
 export async function createTransfer(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const fromId = str(fd.get("fromAccountId"));
   const toId = str(fd.get("toAccountId"));
   const amount = money(fd.get("amount"));
@@ -756,6 +1012,7 @@ export async function createTransfer(fd: FormData): Promise<ActionResult> {
   await db.transaction.createMany({
     data: [
       {
+        userId,
         description: `Transferência para ${to.name}`,
         amount,
         kind: "despesa",
@@ -766,6 +1023,7 @@ export async function createTransfer(fd: FormData): Promise<ActionResult> {
         installmentId: grupo,
       },
       {
+        userId,
         description: `Transferência de ${from.name}`,
         amount,
         kind: "receita",
@@ -777,12 +1035,20 @@ export async function createTransfer(fd: FormData): Promise<ActionResult> {
       },
     ],
   });
+  await logActivity(
+    userId,
+    "transferencia.criar",
+    `Transferência: ${from.name} → ${to.name} — R$ ${amount.toFixed(2)}`
+  );
   revalidateApp();
   return { ok: true };
 }
 
 // ---------- Metas de economia ----------
 export async function createGoal(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   const target = money(fd.get("target"));
   if (!name) return { ok: false, error: "Informe o nome da meta." };
@@ -791,6 +1057,7 @@ export async function createGoal(fd: FormData): Promise<ActionResult> {
   const count = await db.goal.count();
   await db.goal.create({
     data: {
+      userId,
       name,
       target,
       saved: money(fd.get("saved")),
@@ -798,11 +1065,15 @@ export async function createGoal(fd: FormData): Promise<ActionResult> {
       color: str(fd.get("color")) || CHART_COLORS[count % CHART_COLORS.length],
     },
   });
+  await logActivity(userId, "meta.criar", `Meta criada: ${name}`);
   revalidateApp();
   return { ok: true };
 }
 
 export async function updateGoal(id: string, fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const name = str(fd.get("name"));
   const target = money(fd.get("target"));
   if (!name) return { ok: false, error: "Informe o nome da meta." };
@@ -819,46 +1090,67 @@ export async function updateGoal(id: string, fd: FormData): Promise<ActionResult
       ...(color ? { color } : {}),
     },
   });
+  await logActivity(userId, "meta.editar", `Meta atualizada: ${name}`);
   revalidateApp();
   return { ok: true };
 }
 
 // Adiciona (ou remove, se negativo) um valor ao guardado da meta
 export async function addToGoal(id: string, delta: number): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const g = await db.goal.findUnique({ where: { id } });
   if (!g) return { ok: false, error: "Meta não encontrada." };
   await db.goal.update({
     where: { id },
     data: { saved: Math.max(g.saved + delta, 0) },
   });
+  await logActivity(
+    userId,
+    "meta.contribuir",
+    `${delta >= 0 ? "Contribuição" : "Retirada"} na meta ${g.name}: R$ ${Math.abs(delta).toFixed(2)}`
+  );
   revalidateApp();
   return { ok: true };
 }
 
 export async function deleteGoal(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.goal.delete({ where: { id } });
+  await logActivity(userId, "meta.excluir", "Meta excluída");
   revalidateApp();
   return { ok: true };
 }
 
 // ---------- FIIs ----------
 export async function createFii(fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const ticker = str(fd.get("ticker")).toUpperCase();
   if (!ticker) return { ok: false, error: "Informe o ticker do FII." };
-  const exists = await db.fii.findUnique({ where: { ticker } });
-  if (exists) return { ok: false, error: "Esse FII já está cadastrado." };
+  const jaExiste = await db.fii.findFirst({ where: { ticker } });
+  if (jaExiste) return { ok: false, error: "Esse FII já está cadastrado." };
   await db.fii.create({
     data: {
+      userId,
       ticker,
       name: str(fd.get("name")),
       color: str(fd.get("color")) || CHART_COLORS[0],
     },
   });
+  await logActivity(userId, "fii.criar", `FII adicionado: ${ticker}`);
   revalidatePath("/fiis");
   return { ok: true };
 }
 
 export async function updateFii(id: string, fd: FormData): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const dyRaw = str(fd.get("dy"));
   const pvpRaw = str(fd.get("pvp"));
   await db.fii.update({
@@ -870,13 +1162,18 @@ export async function updateFii(id: string, fd: FormData): Promise<ActionResult>
       pvp: pvpRaw ? money(fd.get("pvp")) : null,
     },
   });
+  await logActivity(userId, "fii.editar", "FII atualizado");
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${id}`);
   return { ok: true };
 }
 
 export async function deleteFii(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   await db.fii.delete({ where: { id } });
+  await logActivity(userId, "fii.excluir", "FII excluído");
   revalidatePath("/fiis");
   return { ok: true };
 }
@@ -885,6 +1182,9 @@ export async function createFiiTransaction(
   fiiId: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const quantity = parseInt(str(fd.get("quantity")), 10);
   const price = money(fd.get("price"));
   const kind = str(fd.get("kind")) || "compra";
@@ -893,6 +1193,7 @@ export async function createFiiTransaction(
   if (price <= 0) return { ok: false, error: "Informe o preço." };
   await db.fiiTransaction.create({
     data: {
+      userId,
       fiiId,
       kind,
       quantity,
@@ -900,13 +1201,22 @@ export async function createFiiTransaction(
       date: dateStr ? new Date(dateStr) : new Date(),
     },
   });
+  await logActivity(
+    userId,
+    "fii.operacao",
+    `${kind === "venda" ? "Venda" : "Compra"} de FII: ${quantity} cota(s) a R$ ${price.toFixed(2)}`
+  );
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${fiiId}`);
   return { ok: true };
 }
 
 export async function deleteFiiTransaction(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const t = await db.fiiTransaction.delete({ where: { id } });
+  await logActivity(userId, "fii.operacao_excluir", "Operação de FII excluída");
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${t.fiiId}`);
   return { ok: true };
@@ -916,19 +1226,27 @@ export async function createFiiDividend(
   fiiId: string,
   fd: FormData
 ): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const amount = money(fd.get("amount"));
   const dateStr = str(fd.get("date"));
   if (amount <= 0) return { ok: false, error: "Informe o valor recebido." };
   await db.fiiDividend.create({
-    data: { fiiId, amount, date: dateStr ? new Date(dateStr) : new Date() },
+    data: { userId, fiiId, amount, date: dateStr ? new Date(dateStr) : new Date() },
   });
+  await logActivity(userId, "fii.dividendo", `Rendimento registrado: R$ ${amount.toFixed(2)}`);
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${fiiId}`);
   return { ok: true };
 }
 
 export async function deleteFiiDividend(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const d = await db.fiiDividend.delete({ where: { id } });
+  await logActivity(userId, "fii.dividendo_excluir", "Rendimento excluído");
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${d.fiiId}`);
   return { ok: true };
@@ -950,6 +1268,9 @@ async function fetchFiiPrice(ticker: string): Promise<number | null> {
 }
 
 export async function refreshFiiPrice(id: string): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const fii = await db.fii.findUnique({ where: { id } });
   if (!fii) return { ok: false, error: "FII não encontrado." };
   const price = await fetchFiiPrice(fii.ticker);
@@ -964,6 +1285,9 @@ export async function refreshFiiPrice(id: string): Promise<ActionResult> {
 }
 
 export async function refreshAllFiiPrices(): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
   const fiis = await db.fii.findMany();
   for (const f of fiis) {
     const price = await fetchFiiPrice(f.ticker);

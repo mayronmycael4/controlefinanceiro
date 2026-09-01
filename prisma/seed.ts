@@ -1,6 +1,13 @@
 import { PrismaClient } from "@prisma/client";
+import { scryptSync, randomBytes } from "node:crypto";
 
 const db = new PrismaClient();
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
 
 const CHART = [
   "var(--color-chart-1)",
@@ -10,25 +17,33 @@ const CHART = [
   "var(--color-chart-5)",
 ];
 
+const DEMO_EMAIL = "brucestrela@pm.me";
+
 async function main() {
-  // Limpa (ordem por causa das FKs)
-  await db.transaction.deleteMany();
-  await db.budget.deleteMany();
-  await db.category.deleteMany();
-  await db.account.deleteMany();
-  await db.creditCard.deleteMany();
+  // Limpa o usuário demo (cascade remove todos os dados ligados a ele)
+  await db.user.deleteMany({ where: { email: DEMO_EMAIL } });
+
+  const user = await db.user.create({
+    data: {
+      name: "Bruce Strela",
+      email: DEMO_EMAIL,
+      password: hashPassword("1234"),
+      role: "admin",
+    },
+  });
+  const userId = user.id;
 
   // Contas / carteiras
   const [carteira, corrente, poupanca] = await Promise.all([
-    db.account.create({ data: { name: "Carteira", type: "carteira", color: CHART[0], initialBalance: 850 } }),
-    db.account.create({ data: { name: "Conta Corrente — Nubank", type: "corrente", color: CHART[1], initialBalance: 12400 } }),
-    db.account.create({ data: { name: "Poupança", type: "poupanca", color: CHART[2], initialBalance: 30000 } }),
+    db.account.create({ data: { userId, name: "Carteira", type: "carteira", color: CHART[0], initialBalance: 850 } }),
+    db.account.create({ data: { userId, name: "Conta Corrente — Nubank", type: "corrente", color: CHART[1], initialBalance: 12400 } }),
+    db.account.create({ data: { userId, name: "Poupança", type: "poupanca", color: CHART[2], initialBalance: 30000 } }),
   ]);
 
   // Cartões de crédito
   const [visa, master] = await Promise.all([
-    db.creditCard.create({ data: { name: "Visa Infinite", brand: "Visa", limit: 15000, closingDay: 3, dueDay: 10, color: CHART[3] } }),
-    db.creditCard.create({ data: { name: "Mastercard Black", brand: "Mastercard", limit: 20000, closingDay: 20, dueDay: 28, color: CHART[4] } }),
+    db.creditCard.create({ data: { userId, name: "Visa Infinite", brand: "Visa", limit: 15000, closingDay: 3, dueDay: 10, color: CHART[3] } }),
+    db.creditCard.create({ data: { userId, name: "Mastercard Black", brand: "Mastercard", limit: 20000, closingDay: 20, dueDay: 28, color: CHART[4] } }),
   ]);
 
   // Categorias de despesa
@@ -41,7 +56,7 @@ async function main() {
       ["Saúde", CHART[4]],
       ["Outros", CHART[0]],
     ].map(([name, color]) =>
-      db.category.create({ data: { name, kind: "despesa", color } })
+      db.category.create({ data: { userId, name, kind: "despesa", color } })
     )
   );
   // Categorias de receita
@@ -51,7 +66,7 @@ async function main() {
       ["Freelance", CHART[2]],
       ["Investimentos", CHART[3]],
     ].map(([name, color]) =>
-      db.category.create({ data: { name, kind: "receita", color } })
+      db.category.create({ data: { userId, name, kind: "receita", color } })
     )
   );
 
@@ -91,20 +106,21 @@ async function main() {
     { description: "Farmácia", amount: 132.7, kind: "despesa", status: "pago", date: d(19), categoryId: byName(catDesp, "Saúde"), accountId: carteira.id },
   ];
 
-  await db.transaction.createMany({ data: txs });
+  await db.transaction.createMany({ data: txs.map((t) => ({ ...t, userId })) });
 
   // Orçamentos do mês atual (mês é 1-based no banco)
   await db.budget.createMany({
     data: [
-      { amount: 12000, month: m + 1, year: y, categoryId: null }, // total
-      { amount: 4000, month: m + 1, year: y, categoryId: byName(catDesp, "Moradia") },
-      { amount: 2500, month: m + 1, year: y, categoryId: byName(catDesp, "Alimentação") },
-      { amount: 800, month: m + 1, year: y, categoryId: byName(catDesp, "Transporte") },
-      { amount: 1000, month: m + 1, year: y, categoryId: byName(catDesp, "Lazer") },
+      { userId, amount: 12000, month: m + 1, year: y, categoryId: null }, // total
+      { userId, amount: 4000, month: m + 1, year: y, categoryId: byName(catDesp, "Moradia") },
+      { userId, amount: 2500, month: m + 1, year: y, categoryId: byName(catDesp, "Alimentação") },
+      { userId, amount: 800, month: m + 1, year: y, categoryId: byName(catDesp, "Transporte") },
+      { userId, amount: 1000, month: m + 1, year: y, categoryId: byName(catDesp, "Lazer") },
     ],
   });
 
   console.log("Seed concluído:", {
+    usuario: DEMO_EMAIL,
     contas: 3,
     cartoes: 2,
     categorias: catDesp.length + catRec.length,

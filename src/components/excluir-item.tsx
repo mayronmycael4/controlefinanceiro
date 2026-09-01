@@ -26,6 +26,7 @@ import {
   deleteFii,
   deleteFiiTransaction,
   deleteFiiDividend,
+  deleteUserByAdmin,
 } from "@/lib/actions";
 
 const actions = {
@@ -38,6 +39,7 @@ const actions = {
   fii: deleteFii,
   fiiTransaction: deleteFiiTransaction,
   fiiDividend: deleteFiiDividend,
+  user: deleteUserByAdmin,
 };
 
 export function ExcluirItem({
@@ -45,7 +47,7 @@ export function ExcluirItem({
   id,
   nome,
 }: {
-  kind: "account" | "card" | "budget" | "recurring" | "category" | "goal" | "fii" | "fiiTransaction" | "fiiDividend";
+  kind: "account" | "card" | "budget" | "recurring" | "category" | "goal" | "fii" | "fiiTransaction" | "fiiDividend" | "user";
   id: string;
   nome: string;
 }) {

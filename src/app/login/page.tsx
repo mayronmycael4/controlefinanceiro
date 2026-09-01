@@ -17,33 +17,60 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { authenticate } from "@/lib/actions";
+import { authenticate, signup } from "@/lib/actions";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("brucestrela@pm.me");
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [loading, setLoading] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email || !senha) {
-      toast.error("Preencha e-mail e senha.");
-      return;
-    }
-    setLoading(true);
-    const fd = new FormData();
-    fd.set("email", email);
-    fd.set("password", senha);
-    authenticate(fd).then((res) => {
-      if (res.ok) {
-        toast.success("Bem-vindo de volta!");
-        router.push("/dashboard");
-      } else {
-        toast.error(res.error ?? "Não foi possível entrar.");
-        setLoading(false);
+    if (mode === "login") {
+      if (!email || !senha) {
+        toast.error("Preencha e-mail e senha.");
+        return;
       }
-    });
+      setLoading(true);
+      const fd = new FormData();
+      fd.set("email", email);
+      fd.set("password", senha);
+      authenticate(fd).then((res) => {
+        if (res.ok) {
+          toast.success("Bem-vindo de volta!");
+          router.push("/dashboard");
+          router.refresh();
+        } else {
+          toast.error(res.error ?? "Não foi possível entrar.");
+          setLoading(false);
+        }
+      });
+    } else {
+      if (!name || !email || !senha) {
+        toast.error("Preencha todos os campos.");
+        return;
+      }
+      setLoading(true);
+      const fd = new FormData();
+      fd.set("name", name);
+      fd.set("email", email);
+      fd.set("password", senha);
+      fd.set("confirmPassword", confirmarSenha);
+      signup(fd).then((res) => {
+        if (res.ok) {
+          toast.success("Conta criada com sucesso!");
+          router.push("/dashboard");
+          router.refresh();
+        } else {
+          toast.error(res.error ?? "Não foi possível criar a conta.");
+          setLoading(false);
+        }
+      });
+    }
   }
 
   return (
@@ -63,13 +90,29 @@ export default function LoginPage() {
         <div className="flex flex-1 items-center justify-center">
           <Card className="w-full max-w-sm border-0 shadow-none sm:border sm:shadow-sm">
             <CardHeader>
-              <CardTitle className="text-2xl">Entrar na sua conta</CardTitle>
+              <CardTitle className="text-2xl">
+                {mode === "login" ? "Entrar na sua conta" : "Criar conta"}
+              </CardTitle>
               <CardDescription>
-                Digite suas credenciais para acessar o painel financeiro.
+                {mode === "login"
+                  ? "Digite suas credenciais para acessar o painel financeiro."
+                  : "Preencha os dados para começar a usar o FinControle."}
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="grid gap-4">
+                {mode === "signup" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Nome</Label>
+                    <Input
+                      id="name"
+                      placeholder="Seu nome"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                    />
+                  </div>
+                )}
                 <div className="grid gap-2">
                   <Label htmlFor="email">E-mail</Label>
                   <Input
@@ -84,13 +127,15 @@ export default function LoginPage() {
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="senha">Senha</Label>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => toast.info("Recuperação de senha (demo).")}
-                    >
-                      Esqueceu a senha?
-                    </button>
+                    {mode === "login" && (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => toast.info("Recuperação de senha (demo).")}
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    )}
                   </div>
                   <Input
                     id="senha"
@@ -98,32 +143,63 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
-                    autoComplete="current-password"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
                   />
                 </div>
+                {mode === "signup" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirmar">Confirmar senha</Label>
+                    <Input
+                      id="confirmar"
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="mt-6 flex-col gap-3">
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="size-4 animate-spin" />}
-                  {loading ? "Entrando..." : "Entrar"}
+                  {loading
+                    ? mode === "login"
+                      ? "Entrando..."
+                      : "Criando conta..."
+                    : mode === "login"
+                      ? "Entrar"
+                      : "Criar conta"}
                 </Button>
                 <p className="text-center text-sm text-muted-foreground">
-                  Não tem conta?{" "}
-                  <button
-                    type="button"
-                    className="font-medium text-foreground underline-offset-4 hover:underline"
-                    onClick={() => toast.info("Cadastro (demo).")}
-                  >
-                    Cadastre-se
-                  </button>
+                  {mode === "login" ? (
+                    <>
+                      Não tem conta?{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline-offset-4 hover:underline"
+                        onClick={() => setMode("signup")}
+                      >
+                        Cadastre-se
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Já tem conta?{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline-offset-4 hover:underline"
+                        onClick={() => setMode("login")}
+                      >
+                        Entrar
+                      </button>
+                    </>
+                  )}
                 </p>
               </CardFooter>
             </form>
           </Card>
         </div>
-        <p className="text-center text-xs text-muted-foreground">
-          Senha padrão: <span className="font-mono font-medium">1234</span>
-        </p>
       </div>
 
       {/* Painel visual */}
@@ -152,6 +228,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-primary-foreground/10 p-4">
       <div className="text-lg font-semibold">{value}</div>
+
       <div className="text-xs text-primary-foreground/60">{label}</div>
     </div>
   );

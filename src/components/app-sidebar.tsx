@@ -20,8 +20,12 @@ import {
   LogOut,
   ChevronsUpDown,
   Landmark,
+  History,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
+
+import { logout } from "@/lib/actions";
 
 import {
   Sidebar,
@@ -46,7 +50,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-export type NavUser = { nome: string; email: string; iniciais: string };
+export type NavUser = {
+  nome: string;
+  email: string;
+  iniciais: string;
+  role: string;
+};
 
 const navPrincipal = [
   { titulo: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -65,8 +74,11 @@ const navPrincipal = [
 
 const navGeral = [
   { titulo: "Categorias", url: "/categorias", icon: Tag },
+  { titulo: "Atividades", url: "/atividades", icon: History },
   { titulo: "Configurações", url: "/configuracoes", icon: Settings },
 ];
+
+const navAdmin = [{ titulo: "Administração", url: "/admin", icon: Users }];
 
 export function AppSidebar({ user }: { user: NavUser }) {
   const pathname = usePathname();
@@ -138,6 +150,30 @@ export function AppSidebar({ user }: { user: NavUser }) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {user.role === "admin" && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administração</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {navAdmin.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.url}
+                      tooltip={item.titulo}
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.titulo}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
@@ -188,8 +224,11 @@ export function AppSidebar({ user }: { user: NavUser }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
-                    toast.success("Sessão encerrada.");
-                    router.push("/login");
+                    logout().then(() => {
+                      toast.success("Sessão encerrada.");
+                      router.push("/login");
+                      router.refresh();
+                    });
                   }}
                 >
                   <LogOut />
