@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { createTransfer } from "@/lib/actions";
 
 type Opt = { id: string; name: string };
@@ -115,7 +116,7 @@ export function TransferenciaDialog({ contas }: { contas: Opt[] }) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="tr-date">Data</Label>
-                <Input id="tr-date" name="date" type="date" defaultValue={hoje} required />
+                <DatePicker id="tr-date" name="date" defaultValue={hoje} required />
               </div>
             </div>
           </div>

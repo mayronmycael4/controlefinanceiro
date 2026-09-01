@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { createFiiTransaction } from "@/lib/actions";
 
 function hoje() {
@@ -103,7 +104,7 @@ export function FiiTransacaoDialog({ fiiId }: { fiiId: string }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="fii-tx-date">Data</Label>
-              <Input id="fii-tx-date" name="date" type="date" defaultValue={hoje()} />
+              <DatePicker id="fii-tx-date" name="date" defaultValue={hoje()} />
             </div>
           </div>
           <DialogFooter>

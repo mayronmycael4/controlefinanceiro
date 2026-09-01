@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ColorPicker } from "@/components/color-picker";
 import { createGoal, updateGoal } from "@/lib/actions";
 import { CHART_COLORS } from "@/lib/constants";
@@ -126,11 +127,11 @@ export function MetaDialog({ meta }: { meta?: MetaEdit }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="goal-deadline">Prazo (opcional)</Label>
-              <Input
+              <DatePicker
                 id="goal-deadline"
                 name="deadline"
-                type="date"
                 defaultValue={toDateInput(meta?.deadline)}
+                placeholder="Sem prazo definido"
               />
             </div>
             <div className="grid gap-2">

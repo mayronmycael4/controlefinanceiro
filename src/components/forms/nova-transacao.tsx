@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DatePicker } from "@/components/ui/date-picker";
 import { createTransaction, updateTransaction, createCategory } from "@/lib/actions";
 import { formatBRL } from "@/lib/format";
 import { FREQUENCIAS_REPETICAO, freqRepeticaoLabel } from "@/lib/constants";
@@ -272,10 +273,9 @@ export function TransacaoDialog({
                 <Label htmlFor="date">
                   {usarCartao ? "Data da compra" : "Data"}
                 </Label>
-                <Input
+                <DatePicker
                   id="date"
                   name="date"
-                  type="date"
                   defaultValue={toDateInput(transacao?.purchaseDate ?? transacao?.date)}
                   required
                 />

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { createFiiDividend } from "@/lib/actions";
 
 function hoje() {
@@ -68,12 +69,7 @@ export function FiiDividendoDialog({ fiiId }: { fiiId: string }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="fii-div-date">Data (mês de referência)</Label>
-              <Input
-                id="fii-div-date"
-                name="date"
-                type="date"
-                defaultValue={hoje()}
-              />
+              <DatePicker id="fii-div-date" name="date" defaultValue={hoje()} />
             </div>
           </div>
           <DialogFooter>
