@@ -840,3 +840,140 @@ export async function deleteGoal(id: string): Promise<ActionResult> {
   revalidateApp();
   return { ok: true };
 }
+
+// ---------- FIIs ----------
+export async function createFii(fd: FormData): Promise<ActionResult> {
+  const ticker = str(fd.get("ticker")).toUpperCase();
+  if (!ticker) return { ok: false, error: "Informe o ticker do FII." };
+  const exists = await db.fii.findUnique({ where: { ticker } });
+  if (exists) return { ok: false, error: "Esse FII já está cadastrado." };
+  await db.fii.create({
+    data: {
+      ticker,
+      name: str(fd.get("name")),
+      color: str(fd.get("color")) || CHART_COLORS[0],
+    },
+  });
+  revalidatePath("/fiis");
+  return { ok: true };
+}
+
+export async function updateFii(id: string, fd: FormData): Promise<ActionResult> {
+  const dyRaw = str(fd.get("dy"));
+  const pvpRaw = str(fd.get("pvp"));
+  await db.fii.update({
+    where: { id },
+    data: {
+      name: str(fd.get("name")),
+      color: str(fd.get("color")) || undefined,
+      dy: dyRaw ? money(fd.get("dy")) : null,
+      pvp: pvpRaw ? money(fd.get("pvp")) : null,
+    },
+  });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${id}`);
+  return { ok: true };
+}
+
+export async function deleteFii(id: string): Promise<ActionResult> {
+  await db.fii.delete({ where: { id } });
+  revalidatePath("/fiis");
+  return { ok: true };
+}
+
+export async function createFiiTransaction(
+  fiiId: string,
+  fd: FormData
+): Promise<ActionResult> {
+  const quantity = parseInt(str(fd.get("quantity")), 10);
+  const price = money(fd.get("price"));
+  const kind = str(fd.get("kind")) || "compra";
+  const dateStr = str(fd.get("date"));
+  if (!quantity || quantity <= 0) return { ok: false, error: "Informe a quantidade." };
+  if (price <= 0) return { ok: false, error: "Informe o preço." };
+  await db.fiiTransaction.create({
+    data: {
+      fiiId,
+      kind,
+      quantity,
+      price,
+      date: dateStr ? new Date(dateStr) : new Date(),
+    },
+  });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${fiiId}`);
+  return { ok: true };
+}
+
+export async function deleteFiiTransaction(id: string): Promise<ActionResult> {
+  const t = await db.fiiTransaction.delete({ where: { id } });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${t.fiiId}`);
+  return { ok: true };
+}
+
+export async function createFiiDividend(
+  fiiId: string,
+  fd: FormData
+): Promise<ActionResult> {
+  const amount = money(fd.get("amount"));
+  const dateStr = str(fd.get("date"));
+  if (amount <= 0) return { ok: false, error: "Informe o valor recebido." };
+  await db.fiiDividend.create({
+    data: { fiiId, amount, date: dateStr ? new Date(dateStr) : new Date() },
+  });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${fiiId}`);
+  return { ok: true };
+}
+
+export async function deleteFiiDividend(id: string): Promise<ActionResult> {
+  const d = await db.fiiDividend.delete({ where: { id } });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${d.fiiId}`);
+  return { ok: true };
+}
+
+// Cotação via brapi.dev (API pública, sem necessidade de chave para uso básico)
+async function fetchFiiPrice(ticker: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://brapi.dev/api/quote/${encodeURIComponent(ticker)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const price = data?.results?.[0]?.regularMarketPrice;
+    return typeof price === "number" ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function refreshFiiPrice(id: string): Promise<ActionResult> {
+  const fii = await db.fii.findUnique({ where: { id } });
+  if (!fii) return { ok: false, error: "FII não encontrado." };
+  const price = await fetchFiiPrice(fii.ticker);
+  if (price == null) return { ok: false, error: "Cotação indisponível para este ticker." };
+  await db.fii.update({
+    where: { id },
+    data: { currentPrice: price, priceUpdatedAt: new Date() },
+  });
+  revalidatePath("/fiis");
+  revalidatePath(`/fiis/${id}`);
+  return { ok: true };
+}
+
+export async function refreshAllFiiPrices(): Promise<ActionResult> {
+  const fiis = await db.fii.findMany();
+  for (const f of fiis) {
+    const price = await fetchFiiPrice(f.ticker);
+    if (price != null) {
+      await db.fii.update({
+        where: { id: f.id },
+        data: { currentPrice: price, priceUpdatedAt: new Date() },
+      });
+    }
+  }
+  revalidatePath("/fiis");
+  return { ok: true };
+}

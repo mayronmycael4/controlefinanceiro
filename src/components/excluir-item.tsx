@@ -23,6 +23,9 @@ import {
   deleteRecurring,
   deleteCategory,
   deleteGoal,
+  deleteFii,
+  deleteFiiTransaction,
+  deleteFiiDividend,
 } from "@/lib/actions";
 
 const actions = {
@@ -32,6 +35,9 @@ const actions = {
   recurring: deleteRecurring,
   category: deleteCategory,
   goal: deleteGoal,
+  fii: deleteFii,
+  fiiTransaction: deleteFiiTransaction,
+  fiiDividend: deleteFiiDividend,
 };
 
 export function ExcluirItem({
@@ -39,7 +45,7 @@ export function ExcluirItem({
   id,
   nome,
 }: {
-  kind: "account" | "card" | "budget" | "recurring" | "category" | "goal";
+  kind: "account" | "card" | "budget" | "recurring" | "category" | "goal" | "fii" | "fiiTransaction" | "fiiDividend";
   id: string;
   nome: string;
 }) {

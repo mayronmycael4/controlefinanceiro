@@ -19,6 +19,7 @@ import {
   Settings,
   LogOut,
   ChevronsUpDown,
+  Landmark,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ const navPrincipal = [
   { titulo: "Contas & Cartões", url: "/contas", icon: CreditCard },
   { titulo: "Orçamento", url: "/orcamento", icon: PiggyBank },
   { titulo: "Metas", url: "/metas", icon: Target },
+  { titulo: "FIIs", url: "/fiis", icon: Landmark },
   { titulo: "Posso comprar?", url: "/simulador", icon: ShieldCheck },
   { titulo: "Relatórios", url: "/relatorios", icon: PieChart },
   { titulo: "Comparativo", url: "/comparativo", icon: GitCompareArrows },

@@ -949,3 +949,69 @@ export async function getBudgets(month: number, year: number) {
     })
     .sort((a, b) => Number(b.isTotal) - Number(a.isTotal));
 }
+
+// ---- Carteira de FIIs ----
+export async function getFiis() {
+  const fiis = await db.fii.findMany({
+    include: { transactions: true, dividends: true },
+    orderBy: { ticker: "asc" },
+  });
+  return fiis.map((f) => {
+    const compras = f.transactions.filter((t) => t.kind !== "venda");
+    const vendas = f.transactions.filter((t) => t.kind === "venda");
+    const qtyComprada = compras.reduce((s, t) => s + t.quantity, 0);
+    const qtyVendida = vendas.reduce((s, t) => s + t.quantity, 0);
+    const quantidade = qtyComprada - qtyVendida;
+    const totalComprado = compras.reduce((s, t) => s + t.quantity * t.price, 0);
+    const precoMedio = qtyComprada > 0 ? totalComprado / qtyComprada : 0;
+    const valorInvestido = quantidade * precoMedio;
+    const valorAtual = quantidade * f.currentPrice;
+    const totalDividendos = f.dividends.reduce((s, d) => s + d.amount, 0);
+    return {
+      id: f.id,
+      ticker: f.ticker,
+      name: f.name,
+      color: f.color,
+      currentPrice: f.currentPrice,
+      priceUpdatedAt: f.priceUpdatedAt,
+      dy: f.dy,
+      pvp: f.pvp,
+      quantidade,
+      precoMedio,
+      valorInvestido,
+      valorAtual,
+      lucro: valorAtual - valorInvestido,
+      totalDividendos,
+    };
+  });
+}
+
+export async function getFiiById(id: string) {
+  const f = await db.fii.findUnique({
+    where: { id },
+    include: {
+      transactions: { orderBy: { date: "desc" } },
+      dividends: { orderBy: { date: "desc" } },
+    },
+  });
+  if (!f) return null;
+  const compras = f.transactions.filter((t) => t.kind !== "venda");
+  const vendas = f.transactions.filter((t) => t.kind === "venda");
+  const qtyComprada = compras.reduce((s, t) => s + t.quantity, 0);
+  const qtyVendida = vendas.reduce((s, t) => s + t.quantity, 0);
+  const quantidade = qtyComprada - qtyVendida;
+  const totalComprado = compras.reduce((s, t) => s + t.quantity * t.price, 0);
+  const precoMedio = qtyComprada > 0 ? totalComprado / qtyComprada : 0;
+  const valorInvestido = quantidade * precoMedio;
+  const valorAtual = quantidade * f.currentPrice;
+  const totalDividendos = f.dividends.reduce((s, d) => s + d.amount, 0);
+  return {
+    ...f,
+    quantidade,
+    precoMedio,
+    valorInvestido,
+    valorAtual,
+    lucro: valorAtual - valorInvestido,
+    totalDividendos,
+  };
+}

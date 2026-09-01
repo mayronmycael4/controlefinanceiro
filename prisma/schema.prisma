@@ -145,3 +145,43 @@ model Budget {
 
   @@unique([month, year, categoryId])
 }
+
+// Carteira de Fundos Imobiliários (FIIs) — controle separado do patrimônio geral.
+model Fii {
+  id             String    @id @default(cuid())
+  ticker         String    @unique // ex.: MXRF11
+  name           String    @default("")
+  color          String    @default("var(--color-chart-1)")
+  currentPrice   Float     @default(0) // cotação atual (manual ou via API)
+  priceUpdatedAt DateTime?
+  dy             Float? // dividend yield informado manualmente (%)
+  pvp            Float? // P/VP informado manualmente
+  createdAt      DateTime  @default(now())
+
+  transactions FiiTransaction[]
+  dividends    FiiDividend[]
+}
+
+model FiiTransaction {
+  id        String   @id @default(cuid())
+  fiiId     String
+  fii       Fii      @relation(fields: [fiiId], references: [id], onDelete: Cascade)
+  kind      String   @default("compra") // compra | venda
+  quantity  Int
+  price     Float // preço unitário da operação
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@index([fiiId])
+}
+
+model FiiDividend {
+  id        String   @id @default(cuid())
+  fiiId     String
+  fii       Fii      @relation(fields: [fiiId], references: [id], onDelete: Cascade)
+  amount    Float // valor total recebido
+  date      DateTime // mês/data de referência do pagamento
+  createdAt DateTime @default(now())
+
+  @@index([fiiId])
+}
