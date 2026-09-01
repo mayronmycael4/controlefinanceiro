@@ -6,7 +6,7 @@ Aplicação web para controle financeiro pessoal: contas, cartões de crédito (
 
 - **Next.js 16** (App Router) + **React 19** + **TypeScript**
 - **Tailwind CSS 4** + **shadcn/ui** (Radix)
-- **Prisma 6** + **SQLite** (banco local em arquivo — não precisa de servidor)
+- **Prisma 6** + **PostgreSQL** (hospedado no Supabase em produção)
 - **Recharts** (gráficos) · **next-themes** (tema claro/escuro)
 - Gerenciador de pacotes: **pnpm**
 
@@ -23,13 +23,16 @@ Dentro da pasta do projeto:
 # 1. Instalar as dependências
 pnpm install
 
-# 2. Criar o banco de dados (SQLite) a partir do schema
+# 2. Criar um arquivo .env com DATABASE_URL apontando para seu Postgres
+#    (veja .env.example)
+
+# 3. Aplicar o schema no banco
 pnpm db:push
 
-# 3. (Opcional) Popular com dados de exemplo
+# 4. (Opcional) Popular com dados de exemplo
 pnpm db:seed
 
-# 4. Rodar em modo desenvolvimento
+# 5. Rodar em modo desenvolvimento
 pnpm dev
 ```
 
@@ -58,64 +61,18 @@ Você pode alterar nome, e-mail e senha em **Configurações**.
 
 ## Banco de dados
 
-- É um arquivo SQLite em **`prisma/dev.db`** (criado pelo `db:push`).
+- PostgreSQL, hospedado gratuitamente no **Supabase**.
 - O schema fica em **`prisma/schema.prisma`**.
-- Se mudar o schema, rode `pnpm db:push` de novo (no Windows, pare o `pnpm dev` antes para liberar o arquivo do Prisma).
-- Para recomeçar do zero, apague `prisma/dev.db` e rode `pnpm db:push` + `pnpm db:seed`.
+- A conexão é configurada pela variável de ambiente `DATABASE_URL` (veja `.env.example`).
+- Se mudar o schema, rode `pnpm db:push` de novo para aplicar as alterações no banco.
 
-## Backup e restauração do banco
+## Deploy (Vercel + Supabase)
 
-Como o banco é um único arquivo (`prisma/dev.db`), o backup é só **copiar esse arquivo**.
-
-> Dica: pare o `pnpm dev` (ou feche o Prisma Studio) antes de copiar, para garantir que não há escrita em andamento.
-
-```bash
-# Fazer backup (com data no nome)
-# Linux/macOS:
-cp prisma/dev.db "backups/dev-$(date +%Y-%m-%d).db"
-
-# Windows (PowerShell):
-Copy-Item prisma/dev.db "backups/dev-$(Get-Date -Format yyyy-MM-dd).db"
-
-# Restaurar: basta sobrescrever o arquivo pelo backup
-# Linux/macOS:
-cp "backups/dev-2026-07-05.db" prisma/dev.db
-# Windows (PowerShell):
-Copy-Item "backups/dev-2026-07-05.db" prisma/dev.db -Force
-```
-
-Você também pode exportar/importar via SQLite CLI (`sqlite3 prisma/dev.db .dump > backup.sql`) se preferir um dump em texto.
-
-## Deploy
-
-### VPS / Railway / Fly.io / Render (com disco persistente) — recomendado para SQLite
-
-Como usamos SQLite (arquivo), o deploy mais simples é em um servidor **com disco persistente** (o arquivo `dev.db` precisa sobreviver aos reinícios).
-
-```bash
-pnpm install
-pnpm db:push          # cria o banco no servidor (uma vez)
-pnpm db:seed          # opcional
-pnpm build
-pnpm start            # sobe a build de produção (porta 3000)
-```
-
-- Garanta que a pasta `prisma/` fique num **volume persistente**.
-- Defina a porta com `pnpm start -p <porta>` se necessário.
-
-### Vercel / Netlify (serverless) — precisa de banco hospedado
-
-Em plataformas **serverless** o sistema de arquivos é temporário/somente-leitura, então o `dev.db` **não persiste**. Para publicar na Vercel, troque o SQLite por um banco hospedado:
-
-- **Turso** (libSQL, compatível com SQLite) — mudança mínima; usa o adapter `@prisma/adapter-libsql`.
-- ou **PostgreSQL** (Neon, Supabase) — troque em `prisma/schema.prisma`:
-  ```prisma
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
-  ```
-  e configure a variável de ambiente `DATABASE_URL` na Vercel; rode `prisma migrate deploy` na build.
+1. Criar um projeto gratuito no [Supabase](https://supabase.com) e copiar a *connection string* (modo **Transaction pooler**, porta 6543).
+2. Criar um projeto na [Vercel](https://vercel.com) importando este repositório do GitHub.
+3. Configurar a variável de ambiente `DATABASE_URL` na Vercel com a connection string do Supabase.
+4. O `postinstall: prisma generate` já está configurado em `package.json`, então o build da Vercel gera o Prisma Client automaticamente.
+5. Cada `git push` na branch `main` gera um novo deploy automático.
 
 Passos gerais na Vercel: conectar o repositório → definir `DATABASE_URL` → deploy. (Sem um banco hospedado, o deploy roda mas os dados se perdem a cada requisição.)
 
