@@ -1,0 +1,147 @@
+// Schema do sistema de controle financeiro (PostgreSQL / Supabase).
+// Enums nativos não usados de propósito — mantemos String com validação na app
+// (histórico de quando o banco era SQLite, que não suporta enums nativos).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id        String   @id
+  name      String
+  email     String
+  password  String // hash no formato "salt:hash"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Metas de economia (objetivos)
+model Goal {
+  id        String    @id @default(cuid())
+  name      String
+  target    Float
+  saved     Float     @default(0)
+  deadline  DateTime?
+  color     String    @default("var(--color-chart-1)")
+  createdAt DateTime  @default(now())
+}
+
+model Account {
+  id             String        @id @default(cuid())
+  name           String
+  type           String        @default("carteira") // carteira | corrente | poupanca
+  color          String        @default("var(--color-chart-1)")
+  initialBalance Float         @default(0)
+  createdAt      DateTime      @default(now())
+  transactions   Transaction[]
+  recurrings     Recurring[]
+}
+
+model CreditCard {
+  id           String        @id @default(cuid())
+  name         String
+  brand        String        @default("")
+  limit        Float         @default(0)
+  closingDay   Int           @default(1)
+  dueDay       Int           @default(10)
+  color        String        @default("var(--color-chart-2)")
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+  recurrings   Recurring[]
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String
+  kind         String        @default("despesa") // receita | despesa
+  color        String        @default("var(--color-chart-3)")
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+  budgets      Budget[]
+  recurrings   Recurring[]
+}
+
+// Transações recorrentes / fixas (assinaturas, salário, aluguel...)
+// Funcionam como modelo: geram lançamentos pendentes a cada mês.
+model Recurring {
+  id            String    @id @default(cuid())
+  description   String
+  amount        Float
+  kind          String    @default("despesa") // receita | despesa
+  frequency     String    @default("mensal") // mensal | semanal | quinzenal | trimestral | semestral | anual
+  dayOfMonth    Int       @default(1) // dia do mês (mensal, trimestral, semestral, anual)
+  dayOfWeek     Int? // 0=domingo .. 6=sábado (semanal, quinzenal)
+  month         Int? // 1-12 (mês âncora: anual, trimestral, semestral)
+  color         String    @default("var(--color-chart-1)")
+  active        Boolean   @default(true)
+  lastGenerated DateTime? // data até a qual já foi materializado
+  createdAt     DateTime  @default(now())
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  creditCardId String?
+  creditCard   CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  description String
+  amount      Float
+  kind        String   @default("despesa") // receita | despesa
+  status      String   @default("pago") // pago | pendente
+  date        DateTime
+  createdAt   DateTime @default(now())
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  creditCardId String?
+  creditCard   CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+
+  recurringId String?
+  recurring   Recurring? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+
+  installmentId String? // agrupa parcelas de uma mesma compra parcelada
+
+  // Etiquetas livres, minúsculas e separadas por vírgula (ex.: "viagem,trabalho")
+  tags String @default("")
+
+  // Data real da compra (cartão). `date` guarda a data da fatura; este campo,
+  // a data em que a compra foi feita. Nulo em lançamentos de conta.
+  purchaseDate DateTime?
+
+  // Pagamento de fatura de cartão: move dinheiro (afeta saldo da conta),
+  // mas NÃO conta como despesa nos relatórios (evita contagem dupla).
+  isTransfer Boolean @default(false)
+
+  @@index([date])
+  @@index([kind])
+  @@index([status])
+  @@index([installmentId])
+}
+
+model Budget {
+  id         String    @id @default(cuid())
+  amount     Float
+  month      Int // 1-12
+  year       Int
+  categoryId String? // null = orçamento total do mês
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@unique([month, year, categoryId])
+}
