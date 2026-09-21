@@ -39,16 +39,18 @@ export default function LoginPage() {
       const fd = new FormData();
       fd.set("email", email);
       fd.set("password", senha);
-      authenticate(fd).then((res) => {
-        if (res.ok) {
-          toast.success("Bem-vindo de volta!");
-          router.push("/dashboard");
-          router.refresh();
-        } else {
-          toast.error(res.error ?? "Não foi possível entrar.");
-          setLoading(false);
-        }
-      });
+      authenticate(fd)
+        .then((res) => {
+          if (res.ok) {
+            toast.success("Bem-vindo de volta!");
+            router.push("/dashboard");
+            router.refresh();
+          } else {
+            toast.error(res.error ?? "Não foi possível entrar.");
+          }
+        })
+        .catch(() => toast.error("Não foi possível conectar ao servidor."))
+        .finally(() => setLoading(false));
     } else {
       if (!name || !email || !senha) {
         toast.error("Preencha todos os campos.");
@@ -60,16 +62,18 @@ export default function LoginPage() {
       fd.set("email", email);
       fd.set("password", senha);
       fd.set("confirmPassword", confirmarSenha);
-      signup(fd).then((res) => {
-        if (res.ok) {
-          toast.success("Conta criada com sucesso!");
-          router.push("/dashboard");
-          router.refresh();
-        } else {
-          toast.error(res.error ?? "Não foi possível criar a conta.");
-          setLoading(false);
-        }
-      });
+      signup(fd)
+        .then((res) => {
+          if (res.ok) {
+            toast.success("Conta criada com sucesso!");
+            router.push("/dashboard");
+            router.refresh();
+          } else {
+            toast.error(res.error ?? "Não foi possível criar a conta.");
+          }
+        })
+        .catch(() => toast.error("Não foi possível conectar ao servidor."))
+        .finally(() => setLoading(false));
     }
   }
 

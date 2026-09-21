@@ -824,7 +824,9 @@ export async function authenticate(fd: FormData): Promise<ActionResult> {
     return { ok: false, error: "E-mail ou senha incorretos." };
   }
   await createSession(user.id);
-  await logActivity(user.id, "auth.login", "Login realizado");
+  // A auditoria não pode bloquear a autenticação caso o banco esteja
+  // momentaneamente indisponível para essa gravação secundária.
+  await logActivity(user.id, "auth.login", "Login realizado").catch(() => {});
   return { ok: true };
 }
 
@@ -856,7 +858,7 @@ export async function signup(fd: FormData): Promise<ActionResult> {
     },
   });
   await createSession(user.id);
-  await logActivity(user.id, "auth.signup", "Conta criada");
+  await logActivity(user.id, "auth.signup", "Conta criada").catch(() => {});
   return { ok: true };
 }
 
