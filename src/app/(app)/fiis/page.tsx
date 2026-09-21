@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
 import { FiiDialog } from "@/components/forms/novo-fii";
 import { AtualizarTodosPrecosFii } from "@/components/forms/atualizar-preco-fii";
+import { AtualizacaoAutomaticaFii } from "@/components/forms/atualizacao-automatica-fii";
 import { getFiis } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
 
@@ -25,6 +26,7 @@ export default async function FiisPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <AtualizacaoAutomaticaFii enabled={fiis.length > 0} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">FIIs</h1>

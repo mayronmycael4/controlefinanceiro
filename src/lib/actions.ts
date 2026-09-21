@@ -1303,3 +1303,26 @@ export async function refreshAllFiiPrices(): Promise<ActionResult> {
   revalidatePath("/fiis");
   return { ok: true };
 }
+
+// Atualização automática: consulta apenas FIIs sem atualização nas últimas 24h.
+// Assim, abrir a tela várias vezes não dispara chamadas desnecessárias à API.
+export async function refreshStaleFiiPrices(): Promise<ActionResult> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada. Faça login novamente." };
+  const db = scopedDb(userId);
+  const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const fiis = await db.fii.findMany({
+    where: { OR: [{ priceUpdatedAt: null }, { priceUpdatedAt: { lt: staleBefore } }] },
+  });
+  for (const f of fiis) {
+    const price = await fetchFiiPrice(f.ticker);
+    if (price != null) {
+      await db.fii.update({
+        where: { id: f.id },
+        data: { currentPrice: price, priceUpdatedAt: new Date() },
+      });
+    }
+  }
+  revalidatePath("/fiis");
+  return { ok: true };
+}

@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { ColorPicker } from "@/components/color-picker";
 import { createFii, updateFii } from "@/lib/actions";
 import { CHART_COLORS } from "@/lib/constants";
+import { FII_CATALOG } from "@/lib/fii-catalog";
 
 export type FiiEdit = {
   id: string;
@@ -93,7 +94,13 @@ export function FiiDialog({ fii }: { fii?: FiiEdit }) {
                 disabled={isEdit}
                 required
                 className="uppercase"
+                list="fii-ticker-suggestions"
               />
+              <datalist id="fii-ticker-suggestions">
+                {FII_CATALOG.map(([ticker, name]) => (
+                  <option key={ticker} value={ticker} label={name} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="fii-name">Nome (opcional)</Label>
