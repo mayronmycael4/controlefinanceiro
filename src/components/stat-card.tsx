@@ -32,7 +32,7 @@ export function StatCard({
   const TrendIcon = subiu ? TrendingUp : TrendingDown;
 
   return (
-    <Card data-sensitive={sensitive ? "true" : undefined}>
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {titulo}
@@ -42,7 +42,7 @@ export function StatCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{valor}</div>
+        <div data-sensitive={sensitive ? "true" : undefined} className="text-2xl font-bold">{valor}</div>
         {temTrend ? (
           <div className="mt-1 flex items-center gap-1 text-xs">
             <span
@@ -63,6 +63,7 @@ export function StatCard({
         ) : (
           legenda && (
             <p
+              data-sensitive={sensitive ? "true" : undefined}
               className={cn(
                 "mt-1 text-xs",
                 tom === "muted" && "text-muted-foreground",

@@ -1,8 +1,27 @@
 @import "tailwindcss";
 
 [data-privacy-hidden="true"] [data-sensitive="true"] {
-  filter: blur(0.55em);
+  position: relative;
+  color: transparent !important;
+  filter: none;
   user-select: none;
+}
+
+[data-privacy-hidden="true"] [data-sensitive="true"] > * {
+  visibility: hidden;
+}
+
+[data-privacy-hidden="true"] [data-sensitive="true"]::after {
+  content: "******";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground, #0f172a);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  visibility: visible;
 }
 @import "tw-animate-css";
 
