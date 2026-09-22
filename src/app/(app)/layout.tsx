@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { getRawSession, getCurrentUser, iniciaisDoNome } from "@/lib/queries";
 import { stopImpersonatingForm } from "@/lib/actions";
+import { PrivacyToggle } from "@/components/privacy-toggle";
 
 export default async function AppLayout({
   children,
@@ -58,6 +59,7 @@ export default async function AppLayout({
             </span>
           </div>
           <div className="ml-auto">
+            <PrivacyToggle />
             <ThemeToggle />
           </div>
 

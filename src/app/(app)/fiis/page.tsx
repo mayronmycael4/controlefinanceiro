@@ -44,12 +44,13 @@ export default async function FiisPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard titulo="Valor investido" valor={formatBRL(valorInvestido)} icon={Wallet} />
+        <StatCard titulo="Valor investido" valor={formatBRL(valorInvestido)} icon={Wallet} sensitive />
         <StatCard
           titulo="Valor atual"
           valor={formatBRL(valorAtual)}
           icon={Landmark}
           tom={lucro >= 0 ? "positivo" : "negativo"}
+          sensitive
         />
         <StatCard
           titulo="Lucro/prejuízo"
@@ -57,9 +58,10 @@ export default async function FiisPage() {
           icon={TrendingUp}
           tom={lucroTotal >= 0 ? "positivo" : "negativo"}
           legenda={`${rentabilidadeTotal.toFixed(2)}% total · ${formatBRL(lucroRealizado)} realizado`}
+          sensitive
         />
         <Link href="/proventos" className="block transition hover:opacity-90">
-          <StatCard titulo="Dividendos recebidos" valor={formatBRL(totalDividendos)} icon={Coins} tom="positivo" legenda="Ver histórico e detalhes" />
+          <StatCard titulo="Dividendos recebidos" valor={formatBRL(totalDividendos)} icon={Coins} tom="positivo" legenda="Ver histórico e detalhes" sensitive />
         </Link>
       </div>
 

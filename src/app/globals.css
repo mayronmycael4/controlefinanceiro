@@ -1,4 +1,9 @@
 @import "tailwindcss";
+
+[data-privacy-hidden="true"] [data-sensitive="true"] {
+  filter: blur(0.55em);
+  user-select: none;
+}
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
