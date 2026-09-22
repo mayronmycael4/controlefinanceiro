@@ -39,7 +39,17 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6) > span:last-child,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7) > span:last-child,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8) > strong {
-  visibility: hidden;
+  visibility: hidden !important;
+  color: transparent !important;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1) > *:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(5) > *:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6) > *:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7) > *:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8) > *:last-child {
+  visibility: hidden !important;
+  color: transparent !important;
 }
 
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1)::after,
@@ -53,6 +63,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  z-index: 2;
+  background: var(--card, #171717);
   color: var(--foreground, #0f172a);
   font-weight: 600;
 }
