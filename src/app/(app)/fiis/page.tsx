@@ -104,6 +104,29 @@ export default async function FiisPage() {
                     <span className="text-muted-foreground">Cotação atual</span>
                     <span className="font-medium">{formatBRL(f.currentPrice)}</span>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Rentabilidade</span>
+                    <span className={f.rentabilidadePct >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-600"}>
+                      {f.rentabilidadePct.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">DY 12M / Yield on Cost</span>
+                    <span className="font-medium">{f.dividendYield12m.toFixed(2)}% / {f.yieldOnCost.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Renda mensal atual</span>
+                    <span className="font-medium">{formatBRL(f.rendaMensalAtual)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Participação</span>
+                    <span className="font-medium">{f.participacaoCarteira.toFixed(2)}%</span>
+                  </div>
+                  {f.priceUpdatedAt && (
+                    <div className="text-xs text-muted-foreground">
+                      Fonte: {f.fonteCotacao} · Atualizado em {f.priceUpdatedAt.toLocaleString("pt-BR")}
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center justify-between border-t pt-2">
                     <span className="text-muted-foreground">Valor atual</span>
                     <span className="font-semibold">{formatBRL(f.valorAtual)}</span>

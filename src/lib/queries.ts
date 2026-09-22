@@ -1041,7 +1041,7 @@ export async function getFiis() {
     include: { transactions: true, dividends: true },
     orderBy: { ticker: "asc" },
   });
-  return fiis.map((f) => {
+  const base = fiis.map((f) => {
     const compras = f.transactions.filter((t) => t.kind !== "venda");
     const vendas = f.transactions.filter((t) => t.kind === "venda");
     const qtyComprada = compras.reduce((s, t) => s + t.quantity, 0);
@@ -1052,6 +1052,11 @@ export async function getFiis() {
     const valorInvestido = quantidade * precoMedio;
     const valorAtual = quantidade * f.currentPrice;
     const totalDividendos = f.dividends.reduce((s, d) => s + d.amount, 0);
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+    const dividendos12m = f.dividends
+      .filter((d) => d.date >= twelveMonthsAgo)
+      .reduce((s, d) => s + d.amount, 0);
     return {
       id: f.id,
       ticker: f.ticker,
@@ -1067,8 +1072,19 @@ export async function getFiis() {
       valorAtual,
       lucro: valorAtual - valorInvestido,
       totalDividendos,
+      dividendos12m,
+      rendaMensalAtual: dividendos12m / 12,
+      rentabilidadePct: valorInvestido > 0 ? ((valorAtual - valorInvestido) / valorInvestido) * 100 : 0,
+      yieldOnCost: valorInvestido > 0 ? (dividendos12m / valorInvestido) * 100 : 0,
+      dividendYield12m: valorAtual > 0 ? (dividendos12m / valorAtual) * 100 : 0,
     };
   });
+  const totalAtual = base.reduce((s, f) => s + f.valorAtual, 0);
+  return base.map((f) => ({
+    ...f,
+    participacaoCarteira: totalAtual > 0 ? (f.valorAtual / totalAtual) * 100 : 0,
+    fonteCotacao: f.priceUpdatedAt ? "Brapi" : null,
+  }));
 }
 
 export async function getFiiById(id: string) {
