@@ -8,7 +8,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { FiisView } from "@/components/fiis-view";
 import { StatCard } from "@/components/stat-card";
 import { FiiDialog } from "@/components/forms/novo-fii";
 import { AtualizarTodosPrecosFii } from "@/components/forms/atualizar-preco-fii";
@@ -71,90 +71,7 @@ export default async function FiisPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {fiis.map((f) => (
-            <Link key={f.id} href={`/fiis/${f.id}`}>
-              <Card className="h-full transition hover:border-foreground/30">
-                <CardHeader className="flex flex-row items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex size-8 items-center justify-center rounded-md text-white"
-                      style={{ backgroundColor: f.color }}
-                    >
-                      <Landmark className="size-4" />
-                    </span>
-                    <div>
-                      <CardTitle className="text-base">{f.ticker}</CardTitle>
-                      {f.name && (
-                        <CardDescription className="truncate">{f.name}</CardDescription>
-                      )}
-                    </div>
-                  </div>
-                  {f.dy != null && <Badge variant="secondary">DY {f.dy.toFixed(1)}%</Badge>}
-                </CardHeader>
-                <CardContent className="grid gap-1 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Cotas</span>
-                    <span className="font-medium">{f.quantidade}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Preço médio</span>
-                    <span className="font-medium">{formatBRL(f.precoMedio)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Cotação atual</span>
-                    <span className="font-medium">{formatBRL(f.currentPrice)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Rentabilidade</span>
-                    <span className={f.rentabilidadePct >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-600"}>
-                      {f.rentabilidadePct.toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">DY 12M / Yield on Cost</span>
-                    <span className="font-medium">{f.dividendYield12m.toFixed(2)}% / {f.yieldOnCost.toFixed(2)}%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Renda mensal atual</span>
-                    <span className="font-medium">{formatBRL(f.rendaMensalAtual)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Participação</span>
-                    <span className="font-medium">{f.participacaoCarteira.toFixed(2)}%</span>
-                  </div>
-                  {f.priceUpdatedAt && (
-                    <div className="text-xs text-muted-foreground">
-                      Fonte: {f.fonteCotacao} · Atualizado em {f.priceUpdatedAt.toLocaleString("pt-BR")}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center justify-between border-t pt-2">
-                    <span className="text-muted-foreground">Valor atual</span>
-                    <span className="font-semibold">{formatBRL(f.valorAtual)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Lucro/prejuízo</span>
-                    <span
-                      className={
-                        f.lucro >= 0
-                          ? "font-semibold text-emerald-600 dark:text-emerald-500"
-                          : "font-semibold text-red-600 dark:text-red-500"
-                      }
-                    >
-                      {formatBRL(f.lucro)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Resultado total</span>
-                    <span className={f.lucroTotal >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-600"}>
-                      {formatBRL(f.lucroTotal)} ({f.rentabilidadeTotalPct.toFixed(2)}%)
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <FiisView fiis={fiis} />
       )}
     </div>
   );
