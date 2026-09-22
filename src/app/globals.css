@@ -12,7 +12,7 @@
 }
 
 [data-privacy-hidden="true"] [data-sensitive="true"]::after {
-  content: "******";
+  content: "••••••";
   position: absolute;
   inset: 0;
   display: flex;
@@ -57,7 +57,7 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8)::after {
-  content: "******";
+  content: "••••••";
   position: absolute;
   inset: 0;
   display: flex;
@@ -81,7 +81,7 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(2)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(5)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(6)::after {
-  content: "******";
+  content: "••••••";
   position: absolute;
   inset: 0;
   display: flex;
