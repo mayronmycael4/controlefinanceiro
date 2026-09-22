@@ -31,8 +31,15 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7),
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8) {
   position: relative;
-  color: transparent !important;
   user-select: none;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1) > span:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(5) > span:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6) > span:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7) > span:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8) > strong {
+  visibility: hidden;
 }
 
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1)::after,
