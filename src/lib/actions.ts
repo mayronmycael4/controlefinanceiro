@@ -1254,19 +1254,40 @@ export async function deleteFiiDividend(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-// Cotação via brapi.dev (API pública, sem necessidade de chave para uso básico)
-async function fetchFiiPrice(ticker: string): Promise<number | null> {
+type FiiQuote = { price: number; source: string };
+
+async function fetchJson(url: string): Promise<unknown | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
-    const res = await fetch(`https://brapi.dev/api/quote/${encodeURIComponent(ticker)}`, {
-      cache: "no-store",
-    });
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!res.ok) return null;
-    const data = await res.json();
-    const price = data?.results?.[0]?.regularMarketPrice;
-    return typeof price === "number" ? price : null;
+    return await res.json();
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+// Providers independentes: uma indisponibilidade temporária não zera a cotação.
+async function fetchFiiPrice(ticker: string): Promise<FiiQuote | null> {
+  const normalized = ticker.trim().toUpperCase();
+  const brapi = await fetchJson(`https://brapi.dev/api/quote/${encodeURIComponent(normalized)}`);
+  const brapiPrice = (brapi as { results?: Array<{ regularMarketPrice?: unknown }> })
+    ?.results?.[0]?.regularMarketPrice;
+  if (typeof brapiPrice === "number" && brapiPrice > 0) {
+    return { price: brapiPrice, source: "Brapi" };
+  }
+
+  const yahoo = await fetchJson(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalized)}.SA?range=1d&interval=1d`
+  );
+  const yahooPrice = (yahoo as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: unknown } }> } })
+    ?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  return typeof yahooPrice === "number" && yahooPrice > 0
+    ? { price: yahooPrice, source: "Yahoo Finance" }
+    : null;
 }
 
 export async function refreshFiiPrice(id: string): Promise<ActionResult> {
@@ -1275,11 +1296,11 @@ export async function refreshFiiPrice(id: string): Promise<ActionResult> {
   const db = scopedDb(userId);
   const fii = await db.fii.findUnique({ where: { id } });
   if (!fii) return { ok: false, error: "FII não encontrado." };
-  const price = await fetchFiiPrice(fii.ticker);
-  if (price == null) return { ok: false, error: "Cotação indisponível para este ticker." };
+  const quote = await fetchFiiPrice(fii.ticker);
+  if (quote == null) return { ok: false, error: "Cotação indisponível no momento; o último valor foi preservado." };
   await db.fii.update({
     where: { id },
-    data: { currentPrice: price, priceUpdatedAt: new Date() },
+    data: { currentPrice: quote.price, priceUpdatedAt: new Date() },
   });
   revalidatePath("/fiis");
   revalidatePath(`/fiis/${id}`);
@@ -1292,11 +1313,11 @@ export async function refreshAllFiiPrices(): Promise<ActionResult> {
   const db = scopedDb(userId);
   const fiis = await db.fii.findMany();
   for (const f of fiis) {
-    const price = await fetchFiiPrice(f.ticker);
-    if (price != null) {
+    const quote = await fetchFiiPrice(f.ticker);
+    if (quote != null) {
       await db.fii.update({
         where: { id: f.id },
-        data: { currentPrice: price, priceUpdatedAt: new Date() },
+        data: { currentPrice: quote.price, priceUpdatedAt: new Date() },
       });
     }
   }
@@ -1314,15 +1335,19 @@ export async function refreshStaleFiiPrices(): Promise<ActionResult> {
   const fiis = await db.fii.findMany({
     where: { OR: [{ priceUpdatedAt: null }, { priceUpdatedAt: { lt: staleBefore } }] },
   });
+  let updated = 0;
   for (const f of fiis) {
-    const price = await fetchFiiPrice(f.ticker);
-    if (price != null) {
+    const quote = await fetchFiiPrice(f.ticker);
+    if (quote != null) {
       await db.fii.update({
         where: { id: f.id },
-        data: { currentPrice: price, priceUpdatedAt: new Date() },
+        data: { currentPrice: quote.price, priceUpdatedAt: new Date() },
       });
+      updated += 1;
     }
   }
   revalidatePath("/fiis");
-  return { ok: true };
+  return updated > 0 || fiis.length === 0
+    ? { ok: true }
+    : { ok: false, error: "Nenhuma fonte de cotação respondeu; tente novamente mais tarde." };
 }

@@ -13,9 +13,11 @@ export function AtualizacaoAutomaticaFii({ enabled }: { enabled: boolean }) {
     const lastCheck = Number(localStorage.getItem(key) ?? 0);
     if (Date.now() - lastCheck < 24 * 60 * 60 * 1000) return;
 
-    localStorage.setItem(key, String(Date.now()));
     refreshStaleFiiPrices().then((result) => {
-      if (result.ok) router.refresh();
+      if (result.ok) {
+        localStorage.setItem(key, String(Date.now()));
+        router.refresh();
+      }
     }).catch(() => {
       // A atualização automática não deve impedir o uso da carteira.
     });
