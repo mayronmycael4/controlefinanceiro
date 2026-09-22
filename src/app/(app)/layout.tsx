@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { getRawSession, getCurrentUser, iniciaisDoNome } from "@/lib/queries";
 import { stopImpersonatingForm } from "@/lib/actions";
 import { PrivacyToggle } from "@/components/privacy-toggle";
-import { PrivacyDisplayGuard } from "@/components/privacy-display-guard";
 
 export default async function AppLayout({
   children,
@@ -35,7 +34,6 @@ export default async function AppLayout({
 
   return (
     <TooltipProvider delayDuration={0}>
-    <PrivacyDisplayGuard />
     <SidebarProvider>
       <AppSidebar user={user} />
       <SidebarInset>
