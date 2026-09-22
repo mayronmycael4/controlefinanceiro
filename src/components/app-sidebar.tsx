@@ -22,6 +22,7 @@ import {
   Landmark,
   History,
   Users,
+  CalendarHeart,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,6 +66,7 @@ const navPrincipal = [
   { titulo: "Orçamento", url: "/orcamento", icon: PiggyBank },
   { titulo: "Metas", url: "/metas", icon: Target },
   { titulo: "FIIs", url: "/fiis", icon: Landmark },
+  { titulo: "Proventos", url: "/proventos", icon: CalendarHeart },
   { titulo: "Posso comprar?", url: "/simulador", icon: ShieldCheck },
   { titulo: "Relatórios", url: "/relatorios", icon: PieChart },
   { titulo: "Comparativo", url: "/comparativo", icon: GitCompareArrows },

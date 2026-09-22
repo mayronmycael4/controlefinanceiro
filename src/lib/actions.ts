@@ -1254,6 +1254,54 @@ export async function deleteFiiDividend(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+type DividendApiEvent = {
+  rate?: number;
+  paymentDate?: string | null;
+  lastDatePrior?: string | null;
+  label?: string | null;
+};
+
+export async function syncFiiDividends(): Promise<ActionResult & { imported?: number }> {
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "Sessão expirada." };
+  const db = scopedDb(userId);
+  const fiis = await db.fii.findMany({ include: { transactions: true } });
+  if (!fiis.length) return { ok: false, error: "Cadastre ao menos um FII antes de sincronizar." };
+
+  const symbols = fiis.map((f) => f.ticker).join(",");
+  const url = new URL("https://brapi.dev/api/v2/fii/dividends");
+  url.searchParams.set("symbols", symbols);
+  url.searchParams.set("startDate", new Date(Date.now() - 366 * 86400000).toISOString().slice(0, 10));
+  url.searchParams.set("sortOrder", "asc");
+  const headers: HeadersInit = {};
+  if (process.env.BRAPI_TOKEN) headers.Authorization = `Bearer ${process.env.BRAPI_TOKEN}`;
+  const response = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(15000) });
+  if (!response.ok) {
+    return { ok: false, error: response.status === 401 || response.status === 403 ? "A fonte exige um token BRAPI para consultar proventos de todos os FIIs. Configure BRAPI_TOKEN na produção." : `Fonte de proventos indisponível (${response.status}).` };
+  }
+  const payload = await response.json() as { dividends?: Record<string, DividendApiEvent[]> };
+  let imported = 0;
+  for (const fii of fiis) {
+    const quantity = fii.transactions.filter((t) => t.kind !== "venda").reduce((sum, t) => sum + t.quantity, 0) - fii.transactions.filter((t) => t.kind === "venda").reduce((sum, t) => sum + t.quantity, 0);
+    if (quantity <= 0) continue;
+    const list = payload.dividends?.[fii.ticker] ?? [];
+    for (const item of list) {
+      const date = item.paymentDate ?? item.lastDatePrior;
+      if (!date || !item.rate || item.rate <= 0) continue;
+      const paymentDate = new Date(`${date}T12:00:00.000Z`);
+      const amount = Math.round(item.rate * quantity * 100) / 100;
+      const existing = await db.fiiDividend.findFirst({ where: { fiiId: fii.id, date: paymentDate, amount } });
+      if (!existing) {
+        await db.fiiDividend.create({ data: { fiiId: fii.id, amount, date: paymentDate, userId } });
+        imported++;
+      }
+    }
+  }
+  revalidatePath("/proventos");
+  revalidatePath("/fiis");
+  return { ok: true, imported };
+}
+
 type FiiQuote = { price: number; source: string };
 
 async function fetchJson(url: string): Promise<unknown | null> {

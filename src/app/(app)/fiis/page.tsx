@@ -23,6 +23,9 @@ export default async function FiisPage() {
   const valorAtual = fiis.reduce((s, f) => s + f.valorAtual, 0);
   const totalDividendos = fiis.reduce((s, f) => s + f.totalDividendos, 0);
   const lucro = valorAtual - valorInvestido;
+  const lucroRealizado = fiis.reduce((s, f) => s + f.lucroRealizado, 0);
+  const lucroTotal = fiis.reduce((s, f) => s + f.lucroTotal, 0);
+  const rentabilidadeTotal = valorInvestido > 0 ? (lucroTotal / valorInvestido) * 100 : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,16 +53,14 @@ export default async function FiisPage() {
         />
         <StatCard
           titulo="Lucro/prejuízo"
-          valor={formatBRL(lucro)}
+          valor={formatBRL(lucroTotal)}
           icon={TrendingUp}
-          tom={lucro >= 0 ? "positivo" : "negativo"}
+          tom={lucroTotal >= 0 ? "positivo" : "negativo"}
+          legenda={`${rentabilidadeTotal.toFixed(2)}% total · ${formatBRL(lucroRealizado)} realizado`}
         />
-        <StatCard
-          titulo="Dividendos recebidos"
-          valor={formatBRL(totalDividendos)}
-          icon={Coins}
-          tom="positivo"
-        />
+        <Link href="/proventos" className="block transition hover:opacity-90">
+          <StatCard titulo="Dividendos recebidos" valor={formatBRL(totalDividendos)} icon={Coins} tom="positivo" legenda="Ver histórico e detalhes" />
+        </Link>
       </div>
 
       {fiis.length === 0 ? (
@@ -141,6 +142,12 @@ export default async function FiisPage() {
                       }
                     >
                       {formatBRL(f.lucro)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Resultado total</span>
+                    <span className={f.lucroTotal >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-600"}>
+                      {formatBRL(f.lucroTotal)} ({f.rentabilidadeTotalPct.toFixed(2)}%)
                     </span>
                   </div>
                 </CardContent>

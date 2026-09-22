@@ -1051,6 +1051,7 @@ export async function getFiis() {
     const precoMedio = qtyComprada > 0 ? totalComprado / qtyComprada : 0;
     const valorInvestido = quantidade * precoMedio;
     const valorAtual = quantidade * f.currentPrice;
+    const lucroRealizado = vendas.reduce((s, t) => s + t.quantity * (t.price - precoMedio), 0);
     const totalDividendos = f.dividends.reduce((s, d) => s + d.amount, 0);
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
@@ -1071,6 +1072,10 @@ export async function getFiis() {
       valorInvestido,
       valorAtual,
       lucro: valorAtual - valorInvestido,
+      lucroNaoRealizado: valorAtual - valorInvestido,
+      lucroRealizado,
+      lucroTotal: valorAtual - valorInvestido + lucroRealizado + totalDividendos,
+      rentabilidadeTotalPct: valorInvestido > 0 ? ((valorAtual - valorInvestido + lucroRealizado + totalDividendos) / valorInvestido) * 100 : 0,
       totalDividendos,
       dividendos12m,
       rendaMensalAtual: dividendos12m / 12,
@@ -1116,5 +1121,38 @@ export async function getFiiById(id: string) {
     valorAtual,
     lucro: valorAtual - valorInvestido,
     totalDividendos,
+  };
+}
+
+export async function getProventos() {
+  const userId = await requireUserId();
+  const db = scopedDb(userId);
+  const hoje = new Date();
+  const dozeMeses = new Date(hoje);
+  dozeMeses.setFullYear(dozeMeses.getFullYear() - 1);
+  const events = (await db.fiiDividend.findMany({
+    include: { fii: { select: { ticker: true } } },
+    orderBy: { date: "desc" },
+  })).map((event) => ({
+    id: event.id,
+    ticker: event.fii.ticker,
+    amount: event.amount,
+    date: event.date,
+  }));
+  const recebidosEventos = events.filter((event) => event.date <= hoje);
+  const aReceberEventos = events.filter((event) => event.date > hoje);
+  const monthly = new Map<string, number>();
+  for (const event of recebidosEventos) {
+    const key = event.date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+    monthly.set(key, (monthly.get(key) ?? 0) + event.amount);
+  }
+  return {
+    eventos: events,
+    recebidosEventos,
+    aReceberEventos,
+    recebidos: recebidosEventos.reduce((sum, event) => sum + event.amount, 0),
+    aReceber: aReceberEventos.reduce((sum, event) => sum + event.amount, 0),
+    ultimos12Meses: recebidosEventos.filter((event) => event.date >= dozeMeses).reduce((sum, event) => sum + event.amount, 0),
+    monthly: Array.from(monthly, ([mes, valor]) => ({ mes, valor: Math.round(valor * 100) / 100 })).reverse(),
   };
 }
