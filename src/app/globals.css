@@ -12,7 +12,7 @@
 }
 
 [data-privacy-hidden="true"] [data-sensitive="true"]::after {
-  content: "••••••";
+  content: "******";
   position: absolute;
   inset: 0;
   display: flex;
@@ -57,7 +57,7 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8)::after {
-  content: "••••••";
+  content: "******";
   position: absolute;
   inset: 0;
   display: flex;
@@ -81,13 +81,52 @@
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(2)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(5)::after,
 [data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(6)::after {
-  content: "••••••";
+  content: "******";
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding: 0.75rem;
+  color: var(--foreground, #0f172a);
+  font-weight: 600;
+}
+
+/* Modos Minimalista e Lista: preserve ticker/nome e métricas públicas. */
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(1),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(3),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(1) > span:last-child,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(3) > strong {
+  color: transparent !important;
+  position: relative;
+  user-select: none;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(1)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(2) > div:nth-child(3)::after {
+  content: "••••••";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--foreground, #0f172a);
+  font-weight: 600;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child.flex > div:nth-child(2),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child.flex > div:nth-child(4) {
+  color: transparent !important;
+  position: relative;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child.flex > div:nth-child(2)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child.flex > div:nth-child(4)::after {
+  content: "••••••";
+  position: absolute;
+  inset: 1.25rem 0.75rem 0;
+  display: flex;
+  justify-content: flex-end;
   color: var(--foreground, #0f172a);
   font-weight: 600;
 }
