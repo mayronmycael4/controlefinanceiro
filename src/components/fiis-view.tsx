@@ -31,7 +31,7 @@ export function FiisView({ fiis }: { fiis: Fii[] }) {
       <span className="px-2 text-sm text-muted-foreground">Visualização</span>
       <div className="flex flex-wrap gap-1">{modes.map(({ id, label, icon: Icon }) => <Button key={id} size="sm" variant={mode === id ? "default" : "ghost"} onClick={() => changeMode(id)} title={`Visualização ${label}`}><Icon />{label}</Button>)}</div>
     </div>
-    <div data-sensitive="true">{mode === "table" ? <TableView fiis={fiis} /> : mode === "list" ? <ListView fiis={fiis} /> : <div className={mode === "minimal" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}>{fiis.map((f) => mode === "minimal" ? <MinimalCard key={f.id} f={f} /> : <NormalCard key={f.id} f={f} />)}</div>}</div>
+    <div data-privacy-cards="true">{mode === "table" ? <TableView fiis={fiis} /> : mode === "list" ? <ListView fiis={fiis} /> : <div className={mode === "minimal" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}>{fiis.map((f) => mode === "minimal" ? <MinimalCard key={f.id} f={f} /> : <NormalCard key={f.id} f={f} />)}</div>}</div>
   </>;
 }
 

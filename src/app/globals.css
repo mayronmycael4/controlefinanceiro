@@ -23,6 +23,32 @@
   letter-spacing: 0.08em;
   visibility: visible;
 }
+
+/* Nos cards de FIIs, mantenha dados públicos e mascare apenas a posição do usuário. */
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(5),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7),
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8) {
+  position: relative;
+  color: transparent !important;
+  user-select: none;
+}
+
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(1)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(5)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(6)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(7)::after,
+[data-privacy-hidden="true"] [data-privacy-cards="true"] [data-slot="card"] > div:last-child > div:nth-child(8)::after {
+  content: "******";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--foreground, #0f172a);
+  font-weight: 600;
+}
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
