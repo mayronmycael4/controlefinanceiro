@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
 import { SincronizarProventos } from "@/components/forms/sincronizar-proventos";
-import { ProventosGrafico } from "@/components/proventos-grafico";
+import { CrescimentoAnualGrafico, ProventosGrafico } from "@/components/proventos-grafico";
 import { getProventos } from "@/lib/queries";
 import { formatBRL } from "@/lib/format";
 
@@ -30,6 +30,13 @@ export default async function ProventosPage() {
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Histórico mensal recebido</CardTitle></CardHeader>
           <CardContent><ProventosGrafico data={data.monthly} /></CardContent>
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Crescimento anual de proventos</CardTitle>
+            <p className="text-sm text-muted-foreground">Comparação do total recebido em cada ano; a porcentagem indica a variação em relação ao ano anterior.</p>
+          </CardHeader>
+          <CardContent><CrescimentoAnualGrafico data={data.annual} /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Recebidos</CardTitle></CardHeader>

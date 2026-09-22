@@ -1142,10 +1142,27 @@ export async function getProventos() {
   const recebidosEventos = events.filter((event) => event.date <= hoje);
   const aReceberEventos = events.filter((event) => event.date > hoje);
   const monthly = new Map<string, number>();
+  const annual = new Map<number, number>();
   for (const event of recebidosEventos) {
-    const key = event.date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+    const key = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, "0")}`;
     monthly.set(key, (monthly.get(key) ?? 0) + event.amount);
+    annual.set(event.date.getFullYear(), (annual.get(event.date.getFullYear()) ?? 0) + event.amount);
   }
+  const monthlyData = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(hoje.getFullYear(), hoje.getMonth() - (11 - index), 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return {
+      mes: date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", ""),
+      valor: Math.round((monthly.get(key) ?? 0) * 100) / 100,
+    };
+  });
+  const annualData = Array.from(annual.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([ano, valor], index, values) => ({
+      ano: String(ano),
+      valor: Math.round(valor * 100) / 100,
+      crescimento: index > 0 && values[index - 1][1] > 0 ? ((valor - values[index - 1][1]) / values[index - 1][1]) * 100 : null,
+    }));
   return {
     eventos: events,
     recebidosEventos,
@@ -1153,6 +1170,7 @@ export async function getProventos() {
     recebidos: recebidosEventos.reduce((sum, event) => sum + event.amount, 0),
     aReceber: aReceberEventos.reduce((sum, event) => sum + event.amount, 0),
     ultimos12Meses: recebidosEventos.filter((event) => event.date >= dozeMeses).reduce((sum, event) => sum + event.amount, 0),
-    monthly: Array.from(monthly, ([mes, valor]) => ({ mes, valor: Math.round(valor * 100) / 100 })).reverse(),
+    monthly: monthlyData,
+    annual: annualData,
   };
 }
