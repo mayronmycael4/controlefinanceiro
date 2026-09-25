@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { syncFiiDividendsFor } from "@/lib/fii-dividends";
+import { syncUserFiiDividends } from "@/lib/fii-dividends";
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/tenant";
 import { CHART_COLORS } from "@/lib/constants";
@@ -1258,13 +1258,9 @@ export async function deleteFiiDividend(id: string): Promise<ActionResult> {
 export async function syncFiiDividends(): Promise<ActionResult & { imported?: number }> {
   const userId = await getUserId();
   if (!userId) return { ok: false, error: "Sessão expirada." };
-  const db = scopedDb(userId);
-  const fiis = await db.fii.findMany({ include: { transactions: true } });
-  if (!fiis.length) return { ok: false, error: "Cadastre ao menos um FII antes de sincronizar." };
-
   let imported = 0;
   try {
-    ({ imported } = await syncFiiDividendsFor(fiis));
+    ({ imported } = await syncUserFiiDividends(userId));
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Não foi possível sincronizar os proventos." };
   }

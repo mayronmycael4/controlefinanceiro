@@ -1139,8 +1139,50 @@ export async function getProventos() {
     amount: event.amount,
     date: event.date,
   }));
-  const recebidosEventos = events.filter((event) => event.date <= hoje);
-  const aReceberEventos = events.filter((event) => event.date > hoje);
+  const fiis = await db.fii.findMany({ include: { transactions: true } });
+  const futureByTicker = new Map<string, { ticker: string; date: Date; amount: number }[]>();
+  for (const fii of fiis) {
+    const quantity = fii.transactions.reduce((total, transaction) => {
+      if (transaction.date > hoje) return total;
+      return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
+    }, 0);
+    if (quantity <= 0) continue;
+    const ticker = fii.ticker.toUpperCase();
+    const url = new URL("https://brapi.dev/api/v2/fii/dividends");
+    url.searchParams.set("symbols", ticker);
+    url.searchParams.set("startDate", hoje.toISOString().slice(0, 10));
+    url.searchParams.set("endDate", new Date(Date.now() + 120 * 86_400_000).toISOString().slice(0, 10));
+    const headers: HeadersInit = {};
+    if (process.env.BRAPI_TOKEN) headers.Authorization = `Bearer ${process.env.BRAPI_TOKEN}`;
+    try {
+      const response = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) continue;
+      const payload = await response.json() as { dividends?: Array<{ symbol?: string; rate?: number; paymentDate?: string | null; lastDatePrior?: string | null }> | Record<string, Array<{ rate?: number; paymentDate?: string | null; lastDatePrior?: string | null }>> };
+      const raw = payload.dividends ?? [];
+      const list = Array.isArray(raw) ? raw.filter((item) => item.symbol?.toUpperCase() === ticker) : raw[ticker] ?? [];
+      for (const item of list) {
+        if (!item.paymentDate || !item.rate || item.rate <= 0) continue;
+        const entitlementDate = new Date(`${item.lastDatePrior ?? item.paymentDate}T23:59:59.999Z`);
+        const eligibleQuantity = fii.transactions.reduce((total, transaction) => {
+          if (transaction.date > entitlementDate) return total;
+          return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
+        }, 0);
+        if (eligibleQuantity <= 0) continue;
+        const rows = futureByTicker.get(ticker) ?? [];
+        rows.push({ ticker, date: new Date(`${item.paymentDate}T12:00:00.000Z`), amount: Math.round(item.rate * eligibleQuantity * 100) / 100 });
+        futureByTicker.set(ticker, rows);
+      }
+    } catch {
+      // A indisponibilidade da fonte não impede a exibição do histórico já salvo.
+    }
+  }
+  const confirmedFutureEvents = [...futureByTicker.values()].flat().map((event, index) => ({ id: `forecast-${event.ticker}-${event.date.toISOString()}-${index}`, ...event }));
+  const receivedEvents = events.filter((event) => event.date <= hoje);
+  const forecastKeys = new Set(confirmedFutureEvents.map((event) => `${event.ticker}-${event.date.toISOString().slice(0, 10)}`));
+  const futureEventsWithoutForecast = events.filter((event) => event.date > hoje && !forecastKeys.has(`${event.ticker.toUpperCase()}-${event.date.toISOString().slice(0, 10)}`));
+  const aReceberEventos = [...futureEventsWithoutForecast, ...confirmedFutureEvents]
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const recebidosEventos = receivedEvents;
   const monthly = new Map<string, number>();
   const annual = new Map<number, number>();
   for (const event of recebidosEventos) {
@@ -1164,7 +1206,7 @@ export async function getProventos() {
       crescimento: index > 0 && values[index - 1][1] > 0 ? ((valor - values[index - 1][1]) / values[index - 1][1]) * 100 : null,
     }));
   return {
-    eventos: events,
+    eventos: [...events.filter((event) => event.date <= hoje || !forecastKeys.has(`${event.ticker.toUpperCase()}-${event.date.toISOString().slice(0, 10)}`)), ...confirmedFutureEvents].sort((a, b) => b.date.getTime() - a.date.getTime()),
     recebidosEventos,
     aReceberEventos,
     recebidos: recebidosEventos.reduce((sum, event) => sum + event.amount, 0),

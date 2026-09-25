@@ -77,17 +77,15 @@ export async function syncFiiDividendsFor(fiis: FiiWithTransactions[]) {
       const quantity = positionOnDate(fii.transactions, entitlementDate);
       if (quantity <= 0) continue;
 
-      // Não altera um lançamento pré-existente: ele pode ter sido conciliado
-      // manualmente com a custódia da B3 e é a fonte de verdade do usuário.
       const existing = await db.fiiDividend.findFirst({
         where: { fiiId: fii.id, userId: fii.userId, date: paymentDate },
       });
+      // Lançamentos existentes podem ter sido conferidos manualmente pelo
+      // usuário; sincronizar não deve sobrescrever valores já armazenados.
       if (existing) continue;
 
       const amount = Math.round(item.rate * quantity * 100) / 100;
-      await db.fiiDividend.create({
-        data: { fiiId: fii.id, amount, date: paymentDate, userId: fii.userId },
-      });
+      await db.fiiDividend.create({ data: { fiiId: fii.id, amount, date: paymentDate, userId: fii.userId } });
       imported++;
     }
   }
@@ -97,5 +95,10 @@ export async function syncFiiDividendsFor(fiis: FiiWithTransactions[]) {
 
 export async function syncAllFiiDividends() {
   const fiis = await db.fii.findMany({ include: { transactions: true } });
+  return syncFiiDividendsFor(fiis);
+}
+
+export async function syncUserFiiDividends(userId: string) {
+  const fiis = await db.fii.findMany({ where: { userId }, include: { transactions: true } });
   return syncFiiDividendsFor(fiis);
 }
