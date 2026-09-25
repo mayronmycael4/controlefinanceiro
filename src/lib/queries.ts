@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/tenant";
 import { MESES } from "@/lib/constants";
 import { requireUserId, getActingUser, getSession } from "@/lib/auth";
+import { fetchFiiDividendEvents, isIncomeDistribution, parseBrapiDate } from "@/lib/fii-dividend-source";
 
 // ---- Usuário logado no momento (considera impersonação) ----
 export async function getCurrentUser() {
@@ -1128,9 +1129,10 @@ export async function getProventos() {
   const userId = await requireUserId();
   const db = scopedDb(userId);
   const hoje = new Date();
+  const hojeUtc = new Date(`${hoje.toISOString().slice(0, 10)}T23:59:59.999Z`);
   const dozeMeses = new Date(hoje);
   dozeMeses.setFullYear(dozeMeses.getFullYear() - 1);
-  const events = (await db.fiiDividend.findMany({
+  const storedEvents = (await db.fiiDividend.findMany({
     include: { fii: { select: { ticker: true } } },
     orderBy: { date: "desc" },
   })).map((event) => ({
@@ -1140,78 +1142,130 @@ export async function getProventos() {
     date: event.date,
   }));
   const fiis = await db.fii.findMany({ include: { transactions: true } });
-  const futureByTicker = new Map<string, { ticker: string; date: Date; amount: number }[]>();
+  const earliestTransaction = fiis.flatMap((fii) => fii.transactions.map((transaction) => transaction.date)).sort((a, b) => a.getTime() - b.getTime())[0];
+  const sourceStart = (earliestTransaction ?? new Date(Date.now() - 5 * 366 * 86_400_000)).toISOString().slice(0, 10);
+  const sourceEvents = await fetchFiiDividendEvents(
+    fiis.map((fii) => fii.ticker),
+    sourceStart,
+    new Date(`${hoje.getFullYear()}-12-31T23:59:59.999Z`).toISOString().slice(0, 10)
+  );
+  type ProventoEvent = { id: string; ticker: string; amount: number; date: Date; estimated?: boolean; perShare?: number };
+  const sourceReceived: ProventoEvent[] = [];
+  const sourceFuture: ProventoEvent[] = [];
+  const forecasts: ProventoEvent[] = [];
+
   for (const fii of fiis) {
-    const quantity = fii.transactions.reduce((total, transaction) => {
-      if (transaction.date > hoje) return total;
+    const ticker = fii.ticker.toUpperCase();
+    const currentQuantity = fii.transactions.reduce((total, transaction) => {
+      if (transaction.date > hojeUtc) return total;
       return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
     }, 0);
-    if (quantity <= 0) continue;
-    const ticker = fii.ticker.toUpperCase();
-    const url = new URL("https://brapi.dev/api/v2/fii/dividends");
-    url.searchParams.set("symbols", ticker);
-    url.searchParams.set("startDate", hoje.toISOString().slice(0, 10));
-    url.searchParams.set("endDate", new Date(Date.now() + 120 * 86_400_000).toISOString().slice(0, 10));
-    const headers: HeadersInit = {};
-    if (process.env.BRAPI_TOKEN) headers.Authorization = `Bearer ${process.env.BRAPI_TOKEN}`;
-    try {
-      const response = await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(8_000) });
-      if (!response.ok) continue;
-      const payload = await response.json() as { dividends?: Array<{ symbol?: string; rate?: number; paymentDate?: string | null; lastDatePrior?: string | null }> | Record<string, Array<{ rate?: number; paymentDate?: string | null; lastDatePrior?: string | null }>> };
-      const raw = payload.dividends ?? [];
-      const list = Array.isArray(raw) ? raw.filter((item) => item.symbol?.toUpperCase() === ticker) : raw[ticker] ?? [];
-      for (const item of list) {
-        if (!item.paymentDate || !item.rate || item.rate <= 0) continue;
-        const entitlementDate = new Date(`${item.lastDatePrior ?? item.paymentDate}T23:59:59.999Z`);
-        const eligibleQuantity = fii.transactions.reduce((total, transaction) => {
-          if (transaction.date > entitlementDate) return total;
-          return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
-        }, 0);
-        if (eligibleQuantity <= 0) continue;
-        const rows = futureByTicker.get(ticker) ?? [];
-        rows.push({ ticker, date: new Date(`${item.paymentDate}T12:00:00.000Z`), amount: Math.round(item.rate * eligibleQuantity * 100) / 100 });
-        futureByTicker.set(ticker, rows);
+    const rawHistory = (sourceEvents.get(ticker) ?? [])
+      .filter((item) => isIncomeDistribution(item) && typeof item.rate === "number" && item.rate > 0)
+      .map((item) => ({
+        item,
+        paymentDate: parseBrapiDate(item.paymentDate),
+        entitlementDate: parseBrapiDate(item.lastDatePrior ?? item.paymentDate, true),
+      }))
+      .filter((entry): entry is typeof entry & { paymentDate: Date; entitlementDate: Date } => Boolean(entry.paymentDate && entry.entitlementDate))
+      .sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
+
+    const recentRates: { rate: number; day: number; verifiedDate: boolean }[] = [];
+    for (const { item, paymentDate, entitlementDate } of rawHistory) {
+      const quantityOnRecord = fii.transactions.reduce((total, transaction) => {
+        if (transaction.date > entitlementDate) return total;
+        return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
+      }, 0);
+      if (paymentDate <= hojeUtc) {
+        if (quantityOnRecord > 0) {
+          const amount = Math.round(item.rate! * quantityOnRecord * 100) / 100;
+          const key = `${ticker}-${paymentDate.toISOString().slice(0, 10)}`;
+          if (!storedEvents.some((event) => `${event.ticker.toUpperCase()}-${event.date.toISOString().slice(0, 10)}` === key)) {
+            sourceReceived.push({ id: `source-${key}`, ticker, amount, date: paymentDate });
+          }
+        }
+        recentRates.push({
+          rate: item.rate!,
+          day: paymentDate.getUTCDate(),
+          verifiedDate: !item.remarks?.toLowerCase().includes("backfilled"),
+        });
+      } else if (quantityOnRecord > 0) {
+        const key = `${ticker}-${paymentDate.toISOString().slice(0, 10)}`;
+        sourceFuture.push({ id: `confirmed-${key}`, ticker, amount: Math.round(item.rate! * quantityOnRecord * 100) / 100, date: paymentDate, perShare: item.rate });
       }
-    } catch {
-      // A indisponibilidade da fonte não impede a exibição do histórico já salvo.
+    }
+
+    if (currentQuantity <= 0 || recentRates.length === 0) continue;
+    const latestRates = recentRates.slice(-3).map((item) => item.rate);
+    const estimatedRate = latestRates.reduce((sum, rate) => sum + rate, 0) / latestRates.length;
+    const verifiedDays = recentRates.filter((item) => item.verifiedDate).slice(-6).map((item) => item.day).sort((a, b) => a - b);
+    const estimatedPayDay = verifiedDays.length
+      ? Math.max(1, Math.min(28, verifiedDays[Math.floor(verifiedDays.length / 2)]))
+      : 15;
+    const confirmedMonths = new Set(sourceFuture.filter((event) => event.ticker === ticker).map((event) => `${event.date.getFullYear()}-${event.date.getMonth()}`));
+    for (let month = hoje.getMonth() + 1; month < 12; month++) {
+      if (confirmedMonths.has(`${hoje.getFullYear()}-${month}`)) continue;
+      const forecastDate = new Date(Date.UTC(hoje.getFullYear(), month, estimatedPayDay, 12));
+      forecasts.push({
+        id: `estimated-${ticker}-${forecastDate.toISOString().slice(0, 10)}`,
+        ticker,
+        amount: Math.round(estimatedRate * currentQuantity * 100) / 100,
+        date: forecastDate,
+        estimated: true,
+        perShare: Math.round(estimatedRate * 10000) / 10000,
+      });
     }
   }
-  const confirmedFutureEvents = [...futureByTicker.values()].flat().map((event, index) => ({ id: `forecast-${event.ticker}-${event.date.toISOString()}-${index}`, ...event }));
-  const receivedEvents = events.filter((event) => event.date <= hoje);
-  const forecastKeys = new Set(confirmedFutureEvents.map((event) => `${event.ticker}-${event.date.toISOString().slice(0, 10)}`));
-  const futureEventsWithoutForecast = events.filter((event) => event.date > hoje && !forecastKeys.has(`${event.ticker.toUpperCase()}-${event.date.toISOString().slice(0, 10)}`));
-  const aReceberEventos = [...futureEventsWithoutForecast, ...confirmedFutureEvents]
+  const forecastKeys = new Set([...sourceFuture, ...forecasts].map((event) => `${event.ticker}-${event.date.getFullYear()}-${event.date.getMonth()}`));
+  const storedFutureEvents = storedEvents.filter((event) => event.date > hojeUtc && !forecastKeys.has(`${event.ticker.toUpperCase()}-${event.date.getFullYear()}-${event.date.getMonth()}`));
+  const receivedEvents: ProventoEvent[] = [
+    ...storedEvents.filter((event) => event.date <= hojeUtc),
+    ...sourceReceived.filter((event) => !storedEvents.some((stored) => `${stored.ticker.toUpperCase()}-${stored.date.toISOString().slice(0, 10)}` === `${event.ticker}-${event.date.toISOString().slice(0, 10)}`)),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const aReceberEventos: ProventoEvent[] = [...storedFutureEvents, ...sourceFuture, ...forecasts]
     .sort((a, b) => a.date.getTime() - b.date.getTime());
-  const recebidosEventos = receivedEvents;
-  const monthly = new Map<string, number>();
+  const eventos: ProventoEvent[] = [...receivedEvents, ...aReceberEventos].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const monthlyReceived = new Map<string, number>();
+  const monthlyForecast = new Map<string, number>();
   const annual = new Map<number, number>();
-  for (const event of recebidosEventos) {
+  for (const event of receivedEvents) {
     const key = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, "0")}`;
-    monthly.set(key, (monthly.get(key) ?? 0) + event.amount);
+    monthlyReceived.set(key, (monthlyReceived.get(key) ?? 0) + event.amount);
     annual.set(event.date.getFullYear(), (annual.get(event.date.getFullYear()) ?? 0) + event.amount);
   }
+  for (const event of aReceberEventos) {
+    const key = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, "0")}`;
+    monthlyForecast.set(key, (monthlyForecast.get(key) ?? 0) + event.amount);
+  }
   const monthlyData = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(hoje.getFullYear(), hoje.getMonth() - (11 - index), 1);
+    const date = new Date(hoje.getFullYear(), index, 1);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     return {
       mes: date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", ""),
-      valor: Math.round((monthly.get(key) ?? 0) * 100) / 100,
+      recebido: Math.round((monthlyReceived.get(key) ?? 0) * 100) / 100,
+      previsto: Math.round((monthlyForecast.get(key) ?? 0) * 100) / 100,
     };
   });
+  const currentYear = hoje.getFullYear();
+  const currentYearForecast = aReceberEventos
+    .filter((event) => event.date.getFullYear() === currentYear)
+    .reduce((sum, event) => sum + event.amount, 0);
+  if (currentYearForecast > 0) annual.set(currentYear, (annual.get(currentYear) ?? 0) + currentYearForecast);
   const annualData = Array.from(annual.entries())
     .sort(([a], [b]) => a - b)
     .map(([ano, valor], index, values) => ({
       ano: String(ano),
       valor: Math.round(valor * 100) / 100,
       crescimento: index > 0 && values[index - 1][1] > 0 ? ((valor - values[index - 1][1]) / values[index - 1][1]) * 100 : null,
+      projetado: ano === currentYear && currentYearForecast > 0,
     }));
   return {
-    eventos: [...events.filter((event) => event.date <= hoje || !forecastKeys.has(`${event.ticker.toUpperCase()}-${event.date.toISOString().slice(0, 10)}`)), ...confirmedFutureEvents].sort((a, b) => b.date.getTime() - a.date.getTime()),
-    recebidosEventos,
+    eventos,
+    recebidosEventos: receivedEvents,
     aReceberEventos,
-    recebidos: recebidosEventos.reduce((sum, event) => sum + event.amount, 0),
+    recebidos: receivedEvents.reduce((sum, event) => sum + event.amount, 0),
     aReceber: aReceberEventos.reduce((sum, event) => sum + event.amount, 0),
-    ultimos12Meses: recebidosEventos.filter((event) => event.date >= dozeMeses).reduce((sum, event) => sum + event.amount, 0),
+    ultimos12Meses: receivedEvents.filter((event) => event.date >= dozeMeses).reduce((sum, event) => sum + event.amount, 0),
     monthly: monthlyData,
     annual: annualData,
   };

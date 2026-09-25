@@ -28,13 +28,13 @@ export default async function ProventosPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Histórico mensal recebido</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Proventos mensais: recebido e estimado</CardTitle><p className="text-sm text-muted-foreground">Estimativas calculadas com base na média dos últimos três rendimentos por cota.</p></CardHeader>
           <CardContent><ProventosGrafico data={data.monthly} /></CardContent>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Crescimento anual de proventos</CardTitle>
-            <p className="text-sm text-muted-foreground">Comparação do total recebido em cada ano; a porcentagem indica a variação em relação ao ano anterior.</p>
+            <p className="text-sm text-muted-foreground">Anos anteriores mostram valores recebidos; o ano atual inclui estimativas para os meses restantes.</p>
           </CardHeader>
           <CardContent><CrescimentoAnualGrafico data={data.annual} /></CardContent>
         </Card>
@@ -57,7 +57,7 @@ export default async function ProventosPage() {
             {data.aReceberEventos.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum pagamento futuro confirmado pela fonte.</p> : (
               <div className="divide-y">
                 {data.aReceberEventos.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                  <div><p className="font-medium">{event.ticker}</p><p className="text-muted-foreground">Previsão: {event.date.toLocaleDateString("pt-BR")}</p></div>
+                  <div><p className="font-medium">{event.ticker}{event.estimated ? <Badge variant="outline" className="ml-2">estimativa</Badge> : <Badge variant="secondary" className="ml-2">confirmado</Badge>}</p><p className="text-muted-foreground">{event.estimated ? "Data estimada" : "Pagamento"}: {event.date.toLocaleDateString("pt-BR")}{event.perShare ? ` · ${formatBRL(event.perShare)}/cota` : ""}</p></div>
                   <span className="font-semibold">{formatBRL(event.amount)}</span>
                 </div>)}
               </div>
@@ -69,11 +69,11 @@ export default async function ProventosPage() {
         <CardHeader><CardTitle>Histórico detalhado</CardTitle></CardHeader>
         <CardContent>
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2">Ativo</th><th className="py-2">Data</th><th className="py-2 text-right">Valor</th><th className="py-2 text-right">Status</th></tr></thead><tbody>
-            {data.eventos.map((event) => <tr key={event.id} className="border-b last:border-0"><td className="py-2 font-medium">{event.ticker}</td><td className="py-2">{event.date.toLocaleDateString("pt-BR")}</td><td className="py-2 text-right">{formatBRL(event.amount)}</td><td className="py-2 text-right">{event.date > new Date() ? "A receber" : "Recebido"}</td></tr>)}
+            {data.eventos.map((event) => <tr key={event.id} className="border-b last:border-0"><td className="py-2 font-medium">{event.ticker}</td><td className="py-2">{event.date.toLocaleDateString("pt-BR")}</td><td className="py-2 text-right">{formatBRL(event.amount)}</td><td className="py-2 text-right">{event.estimated ? "Estimativa" : event.date > new Date() ? "Confirmado" : "Recebido"}</td></tr>)}
           </tbody></table></div>
         </CardContent>
       </Card>
-      <p className="text-xs text-muted-foreground">Os valores são calculados pela quantidade atual e pelos eventos publicados pela fonte de mercado. Pagamentos sem data confirmada não são classificados como “a receber”.</p>
+      <p className="text-xs text-muted-foreground">Proventos recebidos usam a quantidade registrada na data-com. Pagamentos ainda não anunciados são estimativas baseadas na média dos três últimos rendimentos por cota e podem mudar.</p>
     </div>
   );
 }
