@@ -123,6 +123,7 @@ export default async function DashboardPage({
           trendLabel={mesAntLabel}
           trendPositivaEhBoa
           tom="positivo"
+          sensitive
           legenda={`${formatBRL(summary.receitasPendentes)} pendentes`}
         />
         <StatCard
@@ -133,6 +134,7 @@ export default async function DashboardPage({
           trendLabel={mesAntLabel}
           trendPositivaEhBoa={false}
           tom="negativo"
+          sensitive
           legenda={`${formatBRL(summary.despesasPendentes)} pendentes`}
         />
         <StatCard
@@ -143,6 +145,7 @@ export default async function DashboardPage({
           trendLabel={mesAntLabel}
           trendPositivaEhBoa
           tom={economia >= 0 ? "positivo" : "negativo"}
+          sensitive
           legenda={economia >= 0 ? "Você economizou" : "Gastou mais que ganhou"}
         />
         <StatCard

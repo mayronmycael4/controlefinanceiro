@@ -220,6 +220,7 @@ export function TransacoesTable({
                 </Badge>
               </TableCell>
               <TableCell
+                data-sensitive="true"
                 className={cn(
                   "text-right font-mono font-medium",
                   ehTransfer

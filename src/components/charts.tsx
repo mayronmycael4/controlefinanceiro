@@ -63,7 +63,7 @@ export function DonutChart({
 }) {
   const total = data.reduce((s, d) => s + d.valor, 0);
   return (
-    <Card className={className}>
+    <Card data-privacy-chart="true" className={className}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
@@ -164,7 +164,7 @@ export function FluxoBar({
   className?: string;
 }) {
   return (
-    <Card className={className}>
+    <Card data-privacy-chart="true" className={className}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -220,7 +220,7 @@ export function SaldoArea({
   className?: string;
 }) {
   return (
-    <Card className={className}>
+    <Card data-privacy-chart="true" className={className}>
       <CardHeader>
         <CardTitle>Evolução do Saldo</CardTitle>
         <CardDescription>
@@ -306,7 +306,7 @@ export function CategoriaEvolucaoLine({
   );
 
   return (
-    <Card>
+    <Card data-privacy-chart="true">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -361,7 +361,7 @@ export function CategoriaEvolucaoLine({
 // ---- Linha de tendência ----
 export function TendenciaLine({ data }: { data: FluxoRow[] }) {
   return (
-    <Card>
+    <Card data-privacy-chart="true">
       <CardHeader>
         <CardTitle>Tendência de Receitas x Despesas</CardTitle>
         <CardDescription>Linha do tempo do ano (pagos)</CardDescription>
