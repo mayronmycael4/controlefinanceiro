@@ -35,6 +35,10 @@ export default async function FiiPage({
   const { id } = await params;
   const fii = await getFiiById(id);
   if (!fii) notFound();
+  const firstOperation = fii.transactions.reduce<Date | null>((first, transaction) => !first || transaction.date < first ? transaction.date : first, null);
+  const dividendsBeforeRecordedHistory = firstOperation
+    ? fii.dividends.some((dividend) => dividend.date < firstOperation)
+    : false;
 
   return (
     <div className="flex flex-col gap-6">
@@ -79,7 +83,7 @@ export default async function FiiPage({
               Cotas
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-bold">{fii.quantidade}</CardContent>
+          <CardContent data-sensitive="true" className="text-2xl font-bold">{fii.quantidade}</CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
@@ -87,7 +91,7 @@ export default async function FiiPage({
               Preço médio
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-bold">
+          <CardContent data-sensitive="true" className="text-2xl font-bold">
             {formatBRL(fii.precoMedio)}
           </CardContent>
         </Card>
@@ -112,7 +116,7 @@ export default async function FiiPage({
               Lucro/prejuízo
             </CardTitle>
           </CardHeader>
-          <CardContent
+          <CardContent data-sensitive="true"
             className={
               fii.lucro >= 0
                 ? "text-2xl font-bold text-emerald-600 dark:text-emerald-500"
@@ -128,6 +132,13 @@ export default async function FiiPage({
         <div className="flex gap-2">
           {fii.dy != null && <Badge variant="secondary">DY {fii.dy.toFixed(1)}%</Badge>}
           {fii.pvp != null && <Badge variant="secondary">P/VP {fii.pvp.toFixed(2)}</Badge>}
+        </div>
+      )}
+
+      {dividendsBeforeRecordedHistory && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm" role="note">
+          <p className="font-medium">Confira as datas do histórico</p>
+          <p className="mt-1 text-muted-foreground">Há rendimentos anteriores à primeira operação cadastrada. Sem as datas reais de compra/venda e data-com, o sistema não consegue reconstruir com segurança a quantidade elegível em cada pagamento. Os dados atuais foram preservados e não foram ajustados automaticamente.</p>
         </div>
       )}
 
@@ -165,9 +176,9 @@ export default async function FiiPage({
                         {t.kind === "venda" ? "Venda" : "Compra"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">{t.quantity}</TableCell>
-                    <TableCell className="text-right">{formatBRL(t.price)}</TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell data-sensitive="true" className="text-right">{t.quantity}</TableCell>
+                    <TableCell data-sensitive="true" className="text-right">{formatBRL(t.price)}</TableCell>
+                    <TableCell data-sensitive="true" className="text-right font-medium">
                       {formatBRL(t.quantity * t.price)}
                     </TableCell>
                     <TableCell>
@@ -186,7 +197,7 @@ export default async function FiiPage({
           <div>
             <CardTitle>Rendimentos recebidos</CardTitle>
             <CardDescription>
-              Total recebido: <strong>{formatBRL(fii.totalDividendos)}</strong>
+              Total recebido: <strong data-sensitive="true">{formatBRL(fii.totalDividendos)}</strong>
             </CardDescription>
           </div>
           <FiiDividendoDialog fiiId={fii.id} />
@@ -209,7 +220,7 @@ export default async function FiiPage({
                 {fii.dividends.map((d) => (
                   <TableRow key={d.id}>
                     <TableCell>{d.date.toLocaleDateString("pt-BR")}</TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell data-sensitive="true" className="text-right font-medium">
                       {formatBRL(d.amount)}
                     </TableCell>
                     <TableCell>

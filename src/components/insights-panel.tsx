@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { Insight } from "@/lib/queries";
+import { SensitiveText } from "@/components/sensitive-text";
 
 const ICONS: Record<Insight["kind"], LucideIcon> = {
   budget: AlertTriangle,
@@ -64,7 +65,7 @@ export function InsightsPanel({ insights }: { insights: Insight[] }) {
                 <div className="min-w-0">
                   <div className="text-sm font-medium">{ins.titulo}</div>
                   <div className="text-sm text-muted-foreground">
-                    {ins.descricao}
+                    <SensitiveText value={ins.descricao} />
                   </div>
                 </div>
               </div>

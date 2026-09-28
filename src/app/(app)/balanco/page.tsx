@@ -92,6 +92,7 @@ export default async function BalancoPage({
           icon={Landmark}
           tom="positivo"
           legenda="soma dos saldos"
+          sensitive
         />
         <StatCard
           titulo="Faturas em aberto"
@@ -99,6 +100,7 @@ export default async function BalancoPage({
           icon={CardIcon}
           tom="negativo"
           legenda="cartões de crédito"
+          sensitive
         />
         <StatCard
           titulo="Balanço líquido"
@@ -106,6 +108,7 @@ export default async function BalancoPage({
           icon={Scale}
           tom={liquido >= 0 ? "positivo" : "negativo"}
           legenda="patrimônio − faturas"
+          sensitive
         />
         <StatCard
           titulo={`Resultado ${year}`}
@@ -113,6 +116,7 @@ export default async function BalancoPage({
           icon={resumoAno.saldo >= 0 ? TrendingUp : TrendingDown}
           tom={resumoAno.saldo >= 0 ? "positivo" : "negativo"}
           legenda={`${formatBRL(resumoAno.receitas)} − ${formatBRL(resumoAno.despesas)}`}
+          sensitive
         />
       </div>
 

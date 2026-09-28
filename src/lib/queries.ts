@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { scopedDb } from "@/lib/tenant";
 import { MESES } from "@/lib/constants";
-import { requireUserId, getActingUser, getSession } from "@/lib/auth";
+import { requireUserId, getActingUser, getSession, verifyPassword } from "@/lib/auth";
 import { fetchFiiDividendEvents, isIncomeDistribution, parseBrapiDate } from "@/lib/fii-dividend-source";
 
 // ---- Usuário logado no momento (considera impersonação) ----
@@ -20,8 +20,17 @@ export async function getRawSession() {
 export async function getAllUsers() {
   return db.user.findMany({
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    select: { id: true, name: true, email: true, role: true, createdAt: true, deletedAt: true },
   });
+}
+
+export async function getActiveDefaultPasswordCount() {
+  const session = await getSession();
+  if (session?.user.role !== "admin") return 0;
+  const users = await db.user.findMany({ where: { deletedAt: null }, select: { password: true } });
+  let count = 0;
+  for (const user of users) if (verifyPassword("1234", user.password)) count += 1;
+  return count;
 }
 
 export async function getActivityLogs(opts: {
@@ -1059,6 +1068,18 @@ export async function getFiis() {
     const dividendos12m = f.dividends
       .filter((d) => d.date >= twelveMonthsAgo)
       .reduce((s, d) => s + d.amount, 0);
+    const latestDividend = f.dividends
+      .filter((d) => d.date <= new Date())
+      .sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+    const quantityAtLatestPayment = latestDividend
+      ? f.transactions.reduce((sum, transaction) => transaction.date <= latestDividend.date
+        ? sum + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity)
+        : sum, 0)
+      : 0;
+    const quantityForLatestRate = quantityAtLatestPayment > 0 ? quantityAtLatestPayment : quantidade;
+    const latestRatePerShare = latestDividend && quantityForLatestRate > 0
+      ? latestDividend.amount / quantityForLatestRate
+      : 0;
     return {
       id: f.id,
       ticker: f.ticker,
@@ -1079,7 +1100,7 @@ export async function getFiis() {
       rentabilidadeTotalPct: valorInvestido > 0 ? ((valorAtual - valorInvestido + lucroRealizado + totalDividendos) / valorInvestido) * 100 : 0,
       totalDividendos,
       dividendos12m,
-      rendaMensalAtual: dividendos12m / 12,
+      rendaMensalAtual: latestRatePerShare * Math.max(quantidade, 0),
       rentabilidadePct: valorInvestido > 0 ? ((valorAtual - valorInvestido) / valorInvestido) * 100 : 0,
       yieldOnCost: valorInvestido > 0 ? (dividendos12m / valorInvestido) * 100 : 0,
       dividendYield12m: valorAtual > 0 ? (dividendos12m / valorAtual) * 100 : 0,
@@ -1237,10 +1258,31 @@ export async function getProventos() {
     const key = `${event.date.getFullYear()}-${String(event.date.getMonth() + 1).padStart(2, "0")}`;
     monthlyForecast.set(key, (monthlyForecast.get(key) ?? 0) + event.amount);
   }
-  const monthlyData = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(hoje.getFullYear(), index, 1);
+  const monthlyByYear = new Map<number, { month: number; received: number; forecast: number }[]>();
+  for (const event of receivedEvents) {
+    const year = event.date.getFullYear();
+    const month = event.date.getMonth();
+    const months = monthlyByYear.get(year) ?? Array.from({ length: 12 }, (_, monthIndex) => ({ month: monthIndex, received: 0, forecast: 0 }));
+    months[month].received += event.amount;
+    monthlyByYear.set(year, months);
+  }
+  for (const event of aReceberEventos) {
+    const year = event.date.getFullYear();
+    const month = event.date.getMonth();
+    const months = monthlyByYear.get(year) ?? Array.from({ length: 12 }, (_, monthIndex) => ({ month: monthIndex, received: 0, forecast: 0 }));
+    months[month].forecast += event.amount;
+    monthlyByYear.set(year, months);
+  }
+  const historyYears = [...monthlyByYear.keys()];
+  const firstYear = historyYears.length ? Math.min(...historyYears) : hoje.getFullYear();
+  const monthlyData = Array.from({ length: (hoje.getFullYear() - firstYear + 1) * 12 }, (_, index) => {
+    const year = firstYear + Math.floor(index / 12);
+    const month = index % 12;
+    const date = new Date(year, month, 1);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     return {
+      ano: year,
+      mesNumero: month + 1,
       mes: date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", ""),
       recebido: Math.round((monthlyReceived.get(key) ?? 0) * 100) / 100,
       previsto: Math.round((monthlyForecast.get(key) ?? 0) * 100) / 100,
@@ -1268,5 +1310,6 @@ export async function getProventos() {
     ultimos12Meses: receivedEvents.filter((event) => event.date >= dozeMeses).reduce((sum, event) => sum + event.amount, 0),
     monthly: monthlyData,
     annual: annualData,
+    anosDisponiveis: [...new Set([hoje.getFullYear(), ...monthlyData.map((item) => item.ano)])].sort((a, b) => b - a),
   };
 }

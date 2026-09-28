@@ -73,7 +73,8 @@ export function NovoUsuarioDialog() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="user-password">Senha</Label>
-              <Input id="user-password" name="password" type="password" required />
+              <Input id="user-password" name="password" type="password" minLength={12} autoComplete="new-password" required />
+              <p className="text-xs text-muted-foreground">Use pelo menos 12 caracteres. Senhas padrão não são aceitas.</p>
             </div>
             <div className="grid gap-2">
               <Label>Papel</Label>

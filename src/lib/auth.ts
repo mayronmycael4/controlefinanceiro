@@ -63,12 +63,13 @@ export const getSession = cache(async () => {
 export const getActingUser = cache(async () => {
   const session = await getSession();
   if (!session) return null;
-  if (session.impersonatingId) {
+  if (session.impersonatingId && session.user.role === "admin") {
     const target = await db.user.findUnique({
       where: { id: session.impersonatingId },
     });
     if (target) return target;
   }
+  if (session.user.deletedAt) return null;
   return session.user;
 });
 

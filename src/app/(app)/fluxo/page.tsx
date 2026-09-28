@@ -68,6 +68,7 @@ export default async function FluxoPage({
           valor={formatBRL(patrimonio)}
           icon={Wallet}
           legenda="soma das contas hoje"
+          sensitive
         />
         <StatCard
           titulo={`Saldo projetado (${meses} meses)`}
@@ -75,6 +76,7 @@ export default async function FluxoPage({
           icon={TrendingUp}
           tom={saldoFinal >= patrimonio ? "positivo" : "negativo"}
           legenda={saldoFinal >= 0 ? "considerando as pendências" : "atenção: pode ficar negativo"}
+          sensitive
         />
       </div>
 

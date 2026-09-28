@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { Landmark, Wallet, TrendingUp, Coins } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { FiisView } from "@/components/fiis-view";
 import { StatCard } from "@/components/stat-card";
 import { FiiDialog } from "@/components/forms/novo-fii";

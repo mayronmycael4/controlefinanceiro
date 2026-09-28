@@ -24,83 +24,20 @@
   visibility: visible;
 }
 
-/* Nos cards de FIIs, mantenha dados públicos e mascare apenas a posição do usuário. */
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(1),
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(5),
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(6),
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(7),
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(8) {
-  position: relative;
-  user-select: none;
-}
-
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(1) > span:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(5) > span:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(6) > span:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(7) > span:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(8) > strong {
-  visibility: hidden !important;
-  color: transparent !important;
-}
-
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(1) > *:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(5) > *:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(6) > *:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(7) > *:last-child,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(8) > *:last-child {
-  visibility: hidden !important;
-  color: transparent !important;
-}
-
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(1)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(5)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(6)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(7)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"][data-fii-mode="normal"] [data-slot="card"] > div:last-child > div:nth-child(8)::after {
-  content: "******";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  z-index: 2;
-  background: var(--card, #171717);
-  color: var(--foreground, #0f172a);
-  font-weight: 600;
-}
-
-/* Modo tabela: colunas privadas são mascaradas, métricas públicas permanecem legíveis. */
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(2),
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(5),
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(6) {
-  position: relative;
-  color: transparent !important;
-  user-select: none;
-}
-
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(2)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(5)::after,
-[data-privacy-hidden="true"] [data-privacy-cards="true"] table tbody td:nth-child(6)::after {
-  content: "******";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0.75rem;
-  color: var(--foreground, #0f172a);
-  font-weight: 600;
-}
-
-/* Esconde valores absolutos em gráficos, inclusive tooltips e eixos do dashboard. */
+/* Gráficos financeiros: ocultar magnitude, mas manter categorias e datas legíveis. */
 [data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-tooltip-wrapper,
-[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-cartesian-axis-tick text,
-[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-label-list text {
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-yAxis .recharts-cartesian-axis-tick text,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-label-list text:not(.privacy-public-percent),
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-bar-rectangle,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-area,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-line,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-dot,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-sector {
   visibility: hidden !important;
 }
 
-[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-cartesian-axis-tick text,
-[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-label-list text {
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-yAxis .recharts-cartesian-axis-tick text,
+[data-privacy-hidden="true"] [data-privacy-chart="true"] .recharts-label-list text:not(.privacy-public-percent) {
   fill: transparent !important;
 }
 

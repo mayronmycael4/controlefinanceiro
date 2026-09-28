@@ -814,7 +814,10 @@ export async function deleteRecurring(id: string): Promise<ActionResult> {
 }
 
 // ---------- Perfil / Senha / Login / Cadastro ----------
-export async function authenticate(fd: FormData): Promise<ActionResult> {
+type AuthenticateResult = ActionResult & { accountDeleted?: boolean; canReactivate?: boolean; mustChangePassword?: boolean };
+const ACCOUNT_RECOVERY_DAYS = 90;
+
+export async function authenticate(fd: FormData): Promise<AuthenticateResult> {
   const email = str(fd.get("email")).toLowerCase();
   const password = str(fd.get("password"));
   if (!email || !password)
@@ -824,10 +827,90 @@ export async function authenticate(fd: FormData): Promise<ActionResult> {
   if (!user || !verifyPassword(password, user.password)) {
     return { ok: false, error: "E-mail ou senha incorretos." };
   }
+  if (user.deletedAt) {
+    const deadline = user.deletedAt.getTime() + ACCOUNT_RECOVERY_DAYS * 24 * 60 * 60 * 1000;
+    const canReactivate = Date.now() <= deadline;
+    return {
+      ok: false,
+      accountDeleted: true,
+      canReactivate,
+      mustChangePassword: canReactivate && password === "1234",
+      error: canReactivate
+        ? "Esta conta foi excluída. Você pode reativá-la dentro do prazo de 90 dias."
+        : "Esta conta foi excluída e o prazo de reativação de 90 dias terminou.",
+    };
+  }
+  if (password === "1234") {
+    return { ok: false, mustChangePassword: true, error: "Esta senha temporária não pode mais ser usada. Defina uma nova senha para continuar." };
+  }
   await createSession(user.id);
   // A auditoria não pode bloquear a autenticação caso o banco esteja
   // momentaneamente indisponível para essa gravação secundária.
   await logActivity(user.id, "auth.login", "Login realizado").catch(() => {});
+  return { ok: true };
+}
+
+export async function replaceDefaultPassword(emailInput: string, currentInput: string, nextInput: string, confirmInput: string): Promise<ActionResult> {
+  const email = emailInput.trim().toLowerCase();
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user || currentInput !== "1234" || !verifyPassword(currentInput, user.password)) {
+    return { ok: false, error: "Não foi possível validar a senha temporária." };
+  }
+  if (user.deletedAt && Date.now() > user.deletedAt.getTime() + ACCOUNT_RECOVERY_DAYS * 24 * 60 * 60 * 1000) {
+    return { ok: false, error: "O prazo de reativação de 90 dias terminou." };
+  }
+  if (nextInput.length < 12) return { ok: false, error: "A nova senha deve ter pelo menos 12 caracteres." };
+  if (nextInput === "1234" || nextInput !== confirmInput) return { ok: false, error: "Confirme uma senha nova com pelo menos 12 caracteres." };
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { password: hashPassword(nextInput), ...(user.deletedAt ? { deletedAt: null } : {}) } });
+    await tx.activityLog.create({ data: { userId: user.id, action: user.deletedAt ? "conta.reativar" : "auth.senha_temporaria_trocada", description: user.deletedAt ? "Conta reativada e senha temporária substituída" : "Senha temporária substituída antes do acesso" } });
+  });
+  await createSession(user.id);
+  return { ok: true };
+}
+
+export async function reactivateDeletedAccount(emailInput: string, passwordInput: string): Promise<ActionResult> {
+  const email = emailInput.trim().toLowerCase();
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user || !user.deletedAt || passwordInput === "1234" || !verifyPassword(passwordInput, user.password)) {
+    return { ok: false, error: "Não foi possível reativar. Confira suas credenciais e o status da conta." };
+  }
+  const deadline = user.deletedAt.getTime() + ACCOUNT_RECOVERY_DAYS * 24 * 60 * 60 * 1000;
+  if (Date.now() > deadline) {
+    return { ok: false, error: "O prazo de reativação de 90 dias terminou. Entre em contato com a administração." };
+  }
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { deletedAt: null } });
+    await tx.activityLog.create({ data: { userId: user.id, action: "conta.reativar", description: "Conta reativada pelo titular" } });
+  });
+  await createSession(user.id);
+  return { ok: true };
+}
+
+export async function deactivateMyAccount(fd: FormData): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || session.impersonatingId) {
+    return { ok: false, error: "Saia do modo de visualização administrativa antes de excluir uma conta." };
+  }
+  const user = session.user;
+  const password = str(fd.get("password"));
+  const confirmation = str(fd.get("confirmation"));
+  if (confirmation !== "EXCLUIR") return { ok: false, error: "Digite EXCLUIR para confirmar." };
+  if (!verifyPassword(password, user.password)) return { ok: false, error: "Senha atual incorreta." };
+  if (user.deletedAt) return { ok: false, error: "Esta conta já está excluída." };
+
+  if (user.role === "admin") {
+    const activeAdmins = await db.user.count({ where: { role: "admin", deletedAt: null } });
+    if (activeAdmins <= 1) return { ok: false, error: "O último administrador não pode excluir a própria conta." };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { deletedAt: new Date() } });
+    await tx.activityLog.create({ data: { userId: user.id, action: "conta.excluir", description: "Conta excluída pelo titular; dados preservados para administração" } });
+    await tx.session.deleteMany({ where: { userId: user.id } });
+  });
+  await destroySession();
+  revalidatePath("/admin");
   return { ok: true };
 }
 
@@ -840,8 +923,8 @@ export async function signup(fd: FormData): Promise<ActionResult> {
   if (!name) return { ok: false, error: "Informe seu nome." };
   if (!email || !/.+@.+\..+/.test(email))
     return { ok: false, error: "Informe um e-mail válido." };
-  if (!password || password.length < 4)
-    return { ok: false, error: "A senha deve ter ao menos 4 caracteres." };
+  if (!password || password.length < 12)
+    return { ok: false, error: "A senha deve ter ao menos 12 caracteres." };
   if (password !== confirm)
     return { ok: false, error: "A confirmação de senha não confere." };
 
@@ -896,8 +979,8 @@ export async function changePassword(fd: FormData): Promise<ActionResult> {
   const next = str(fd.get("newPassword"));
   const confirm = str(fd.get("confirmPassword"));
 
-  if (!next || next.length < 4)
-    return { ok: false, error: "A nova senha deve ter ao menos 4 caracteres." };
+  if (!next || next.length < 12)
+    return { ok: false, error: "A nova senha deve ter ao menos 12 caracteres." };
   if (next !== confirm)
     return { ok: false, error: "A confirmação não confere." };
 
@@ -926,8 +1009,9 @@ export async function createUserByAdmin(fd: FormData): Promise<ActionResult> {
   if (!name) return { ok: false, error: "Informe o nome." };
   if (!email || !/.+@.+\..+/.test(email))
     return { ok: false, error: "Informe um e-mail válido." };
-  if (!password || password.length < 4)
-    return { ok: false, error: "A senha deve ter ao menos 4 caracteres." };
+  if (!password || password.length < 12)
+    return { ok: false, error: "A senha deve ter ao menos 12 caracteres." };
+  if (password === "1234") return { ok: false, error: "A senha padrão não pode ser usada." };
 
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) return { ok: false, error: "Já existe uma conta com este e-mail." };
@@ -946,8 +1030,18 @@ export async function deleteUserByAdmin(id: string): Promise<ActionResult> {
     return { ok: false, error: "Apenas administradores podem excluir usuários." };
   if (admin.id === id) return { ok: false, error: "Você não pode excluir a si mesmo." };
 
-  await db.user.delete({ where: { id } });
-  await logActivity(admin.id, "admin.excluir_usuario", "Usuário excluído");
+  const target = await db.user.findUnique({ where: { id } });
+  if (!target) return { ok: false, error: "Usuário não encontrado." };
+  if (target.deletedAt) return { ok: false, error: "Esta conta já está excluída." };
+  if (target.role === "admin") {
+    const activeAdmins = await db.user.count({ where: { role: "admin", deletedAt: null } });
+    if (activeAdmins <= 1) return { ok: false, error: "Não é possível excluir o último administrador ativo." };
+  }
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id }, data: { deletedAt: new Date() } });
+    await tx.session.deleteMany({ where: { userId: id } });
+    await tx.activityLog.create({ data: { userId: admin.id, action: "admin.excluir_usuario", description: `Conta excluída pela administração: ${target.name} (${target.email})` } });
+  });
   revalidatePath("/admin");
   return { ok: true };
 }

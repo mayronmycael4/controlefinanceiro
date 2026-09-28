@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { authenticate, signup } from "@/lib/actions";
+import { authenticate, reactivateDeletedAccount, replaceDefaultPassword, signup } from "@/lib/actions";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,6 +27,11 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
+  const [canReactivate, setCanReactivate] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +51,9 @@ export default function LoginPage() {
             router.push("/dashboard");
             router.refresh();
           } else {
+            setAccountDeleted(Boolean(res.accountDeleted));
+            setCanReactivate(Boolean(res.canReactivate));
+            setMustChangePassword(Boolean(res.mustChangePassword));
             toast.error(res.error ?? "Não foi possível entrar.");
           }
         })
@@ -75,6 +83,31 @@ export default function LoginPage() {
         .catch(() => toast.error("Não foi possível conectar ao servidor."))
         .finally(() => setLoading(false));
     }
+  }
+
+  function handleReactivate() {
+    setLoading(true);
+    reactivateDeletedAccount(email, senha)
+      .then((res) => {
+        if (res.ok) {
+          toast.success("Conta reativada. Bem-vindo de volta!");
+          router.replace("/dashboard");
+          router.refresh();
+        } else toast.error(res.error ?? "Não foi possível reativar a conta.");
+      })
+      .catch(() => toast.error("Não foi possível conectar ao servidor."))
+      .finally(() => setLoading(false));
+  }
+
+  function handleReplaceDefaultPassword() {
+    setLoading(true);
+    replaceDefaultPassword(email, senha, newPassword, confirmNewPassword)
+      .then((res) => {
+        if (res.ok) { toast.success("Senha atualizada. Bem-vindo!"); router.replace("/dashboard"); router.refresh(); }
+        else toast.error(res.error ?? "Não foi possível atualizar a senha.");
+      })
+      .catch(() => toast.error("Não foi possível conectar ao servidor."))
+      .finally(() => setLoading(false));
   }
 
   return (
@@ -117,6 +150,33 @@ export default function LoginPage() {
                     />
                   </div>
                 )}
+                {accountDeleted && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" role="status">
+                    <p className="font-medium">Conta excluída</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {canReactivate
+                        ? "A conta e os dados estão arquivados. Se você pediu a exclusão, ainda pode reativar a conta dentro de 90 dias."
+                        : "O prazo de 90 dias para reativação terminou. Os dados permanecem arquivados e só podem ser consultados pela administração."}
+                    </p>
+                    {canReactivate && !mustChangePassword && (
+                      <Button type="button" variant="outline" className="mt-3 w-full" disabled={loading || !email || !senha} onClick={handleReactivate}>
+                        {loading && <Loader2 className="size-4 animate-spin" />}
+                        Reativar minha conta
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {mustChangePassword && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm" role="status">
+                    <p className="font-medium">Atualização de segurança necessária</p>
+                    <p className="mt-1 text-muted-foreground">Defina uma senha nova com pelo menos 12 caracteres para acessar.{accountDeleted && canReactivate ? " Ao confirmar, sua conta também será reativada dentro do prazo de 90 dias." : ""}</p>
+                    <div className="mt-3 grid gap-2">
+                      <Input aria-label="Nova senha" type="password" autoComplete="new-password" placeholder="Nova senha (mín. 12 caracteres)" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+                      <Input aria-label="Confirmar nova senha" type="password" autoComplete="new-password" placeholder="Confirme a nova senha" value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} />
+                      <Button type="button" variant="outline" disabled={loading || newPassword.length < 12 || !confirmNewPassword} onClick={handleReplaceDefaultPassword}>Atualizar senha e entrar</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="grid gap-2">
                   <Label htmlFor="email">E-mail</Label>
                   <Input
@@ -141,10 +201,11 @@ export default function LoginPage() {
                       </button>
                     )}
                   </div>
-                  <Input
-                    id="senha"
-                    type="password"
-                    placeholder="••••••••"
+                    <Input
+                      id="senha"
+                      type="password"
+                      placeholder="••••••••"
+                      minLength={mode === "signup" ? 12 : undefined}
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     autoComplete={mode === "login" ? "current-password" : "new-password"}
@@ -152,6 +213,7 @@ export default function LoginPage() {
                 </div>
                 {mode === "signup" && (
                   <div className="grid gap-2">
+                    <p className="text-xs text-muted-foreground">Use uma senha com pelo menos 12 caracteres.</p>
                     <Label htmlFor="confirmar">Confirmar senha</Label>
                     <Input
                       id="confirmar"

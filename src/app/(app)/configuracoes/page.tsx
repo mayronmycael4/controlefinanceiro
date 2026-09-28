@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { PerfilForm, SenhaForm } from "@/components/forms/perfil-forms";
 import { getCurrentUser } from "@/lib/queries";
+import { ZonaRiscoConta } from "@/components/forms/zona-risco-conta";
 
 export default async function ConfiguracoesPage() {
   const profile = await getCurrentUser();
@@ -17,6 +18,7 @@ export default async function ConfiguracoesPage() {
 
       <PerfilForm profile={profile} />
       <SenhaForm />
+      <ZonaRiscoConta />
     </div>
   );
 }

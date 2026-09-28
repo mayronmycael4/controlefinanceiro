@@ -98,7 +98,7 @@ export function SenhaForm() {
             Alterar senha
           </CardTitle>
           <CardDescription>
-            A senha padrão é <span className="font-mono font-medium">1234</span>.
+            Informe sua senha atual para definir uma nova senha.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -120,7 +120,7 @@ export function SenhaForm() {
                 id="newPassword"
                 name="newPassword"
                 type="password"
-                placeholder="mín. 4 caracteres"
+                placeholder="mín. 12 caracteres"
                 autoComplete="new-password"
                 required
               />

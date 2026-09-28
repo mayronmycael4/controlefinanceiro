@@ -20,6 +20,10 @@ const CHART = [
 const DEMO_EMAIL = "brucestrela@pm.me";
 
 async function main() {
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedPassword || seedPassword.length < 12 || seedPassword === "1234") {
+    throw new Error("Defina SEED_ADMIN_PASSWORD com pelo menos 12 caracteres antes de executar o seed.");
+  }
   // Limpa o usuário demo (cascade remove todos os dados ligados a ele)
   await db.user.deleteMany({ where: { email: DEMO_EMAIL } });
 
@@ -27,7 +31,7 @@ async function main() {
     data: {
       name: "Bruce Strela",
       email: DEMO_EMAIL,
-      password: hashPassword("1234"),
+      password: hashPassword(seedPassword),
       role: "admin",
     },
   });
