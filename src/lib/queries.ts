@@ -1216,6 +1216,25 @@ export async function getProventos() {
       }
     }
 
+    // If the external source has no usable history for this ticker, derive a
+    // clearly-labelled estimate from the user's own recorded payments.
+    if (recentRates.length === 0 && currentQuantity > 0) {
+      const registeredRates = storedEvents
+        .filter((event) => event.ticker.toUpperCase() === ticker && event.date <= hojeUtc && event.amount > 0)
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 3)
+        .map((event) => {
+          const quantityOnPaymentDate = fii.transactions.reduce((total, transaction) => {
+            if (transaction.date > event.date) return total;
+            return total + (transaction.kind === "venda" ? -transaction.quantity : transaction.quantity);
+          }, 0);
+          const quantity = quantityOnPaymentDate > 0 ? quantityOnPaymentDate : currentQuantity;
+          return { rate: event.amount / quantity, day: event.date.getUTCDate(), verifiedDate: true };
+        })
+        .filter((item) => Number.isFinite(item.rate) && item.rate > 0);
+      recentRates.push(...registeredRates);
+    }
+
     if (currentQuantity <= 0 || recentRates.length === 0) continue;
     const latestRates = recentRates.slice(-3).map((item) => item.rate);
     const estimatedRate = latestRates.reduce((sum, rate) => sum + rate, 0) / latestRates.length;
@@ -1223,7 +1242,11 @@ export async function getProventos() {
     const estimatedPayDay = verifiedDays.length
       ? Math.max(1, Math.min(28, verifiedDays[Math.floor(verifiedDays.length / 2)]))
       : 15;
-    const confirmedMonths = new Set(sourceFuture.filter((event) => event.ticker === ticker).map((event) => `${event.date.getFullYear()}-${event.date.getMonth()}`));
+    const confirmedMonths = new Set(
+      [...sourceFuture, ...storedEvents.filter((event) => event.ticker.toUpperCase() === ticker && event.date > hojeUtc)]
+        .filter((event) => event.ticker.toUpperCase() === ticker)
+        .map((event) => `${event.date.getFullYear()}-${event.date.getMonth()}`),
+    );
     for (let month = hoje.getMonth() + 1; month < 12; month++) {
       if (confirmedMonths.has(`${hoje.getFullYear()}-${month}`)) continue;
       const forecastDate = new Date(Date.UTC(hoje.getFullYear(), month, estimatedPayDay, 12));

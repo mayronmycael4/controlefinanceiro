@@ -29,7 +29,7 @@ export default async function ProventosPage() {
         receivedEvents={data.recebidosEventos}
         futureEvents={data.aReceberEventos}
       />
-      <p className="text-xs text-muted-foreground">Proventos recebidos usam a quantidade registrada na data-com. Pagamentos ainda não anunciados são estimativas baseadas na média dos três últimos rendimentos por cota e podem mudar. O DY exibido nos FIIs usa apenas os proventos registrados; complete o histórico para aproximá-lo do acumulado real de 12 meses.</p>
+      <p className="text-xs text-muted-foreground">Proventos recebidos usam a quantidade registrada na data-com. Sem anúncio futuro na fonte, a previsão usa a média de até três pagamentos recentes por cota (dados da fonte ou lançamentos registrados) aplicada à quantidade atual; é uma estimativa e pode mudar. O DY exibido nos FIIs usa apenas os proventos registrados; complete o histórico para aproximá-lo do acumulado real de 12 meses.</p>
     </div>
   );
 }
